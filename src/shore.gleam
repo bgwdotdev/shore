@@ -11,10 +11,10 @@ import gleam/string
 
 pub fn main_old() {
   io.println("Hello from shore!")
-  Clear |> terminal
+  Clear |> c |> io.print
   set_cbreak() |> echo
   draw(Input) |> io.println
-  Pos(15, 10) |> terminal
+  Pos(15, 10) |> c |> io.print
   draw(Input) |> io.println
   //process.start(read_input, False)
   process.sleep_forever()
@@ -123,20 +123,9 @@ fn event_loop_actor(input: String, spec: Spec(model)) {
 }
 
 fn render(node: Node) {
-  node |> render_node |> printer
+  { c(Clear) <> node |> render_node }
+  |> io.print
 }
-
-@external(erlang, "shore_ffi", "printer")
-fn printer(input: String) -> Nil
-
-//fn do_render_node(node: List(Node), acc: List(String)) -> String {
-//  case node {
-//    [] -> acc
-//    [x, ..xs] -> {
-//      render_node(x)
-//    }
-//  }
-//}
 
 fn render_node(node: Node) -> String {
   case node {
@@ -271,9 +260,6 @@ fn hello_nif() -> Int
 @external(erlang, "shore_ffi", "cmd")
 fn do_cmd(input: Charlist) -> Charlist
 
-@external(erlang, "shore_ffi", "terminal")
-fn terminal(code: TermCode) -> Charlist
-
 @external(erlang, "shore_ffi", "get_pos")
 fn do_get_pos() -> Charlist
 
@@ -304,6 +290,12 @@ fn terminal_rows() -> Result(Int, TODO)
 @external(erlang, "io", "columns")
 fn terminal_columns() -> Result(Int, TODO)
 
+//
+// TERMINAL CODES
+//
+
+const esc = "\u{001b}"
+
 type TermCode {
   Clear
   Top
@@ -314,6 +306,21 @@ type TermCode {
   Down(Int)
   Left(Int)
   Right(Int)
+}
+
+fn c(code: TermCode) -> String {
+  case code {
+    Clear -> esc <> "[2J" <> esc <> "[H"
+    Top -> esc <> "[H"
+    HideCursor -> esc <> "[?25l"
+    ShowCursor -> esc <> "[?25h"
+    Pos(x, y) ->
+      esc <> "[" <> int.to_string(x) <> ";" <> int.to_string(y) <> "H"
+    Up(i) -> esc <> "[" <> int.to_string(i) <> "A"
+    Down(i) -> esc <> "[" <> int.to_string(i) <> "B"
+    Left(i) -> esc <> "[" <> int.to_string(i) <> "D"
+    Right(i) -> esc <> "[" <> int.to_string(i) <> "C"
+  }
 }
 
 fn cmd(input: String) -> String {
