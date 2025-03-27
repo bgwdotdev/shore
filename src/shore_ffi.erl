@@ -1,8 +1,8 @@
 -module(shore_ffi).
 
--export([hello_nif/0, setCbreak_nif/0, setsane_nif/0, cmd/1, terminal/1]).
+-export([hello_nif/0, setCbreak_nif/0, cmd/1, terminal/1]).
 
--nifs([hello_nif/0, setCbreak_nif/0, setsane_nif/0]).
+-nifs([hello_nif/0, setCbreak_nif/0]).
 
 -on_load(init/0).
 
@@ -13,9 +13,6 @@ hello_nif() ->
     erlang:nif_error(nif_library_not_loaded).
 
 setCbreak_nif() ->
-    erlang:nif_error(nif_library_not_loaded).
-
-setsane_nif() ->
     erlang:nif_error(nif_library_not_loaded).
 
 cmd(Input) ->

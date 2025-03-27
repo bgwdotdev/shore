@@ -13,15 +13,12 @@ pub fn main() {
   draw(Input) |> io.println
   Pos(15, 10) |> terminal
   draw(Input) |> io.println
-  //process.start(read_input, False)
+  process.start(read_input, False)
   process.sleep_forever()
 }
 
 @external(erlang, "shore_ffi", "setCbreak_nif")
 fn set_cbreak() -> Nil
-
-@external(erlang, "shore_ffi", "setsane_nif")
-fn set_sane() -> Nil
 
 type Data
 
@@ -29,11 +26,7 @@ type Data
 fn get_chars(prompt: String, count: Int) -> String
 
 fn read_input() {
-  let input = get_chars("", 1)
-  case input {
-    "q" -> set_sane()
-    _ -> Nil
-  }
+  get_chars("", 1)
   read_input()
 }
 

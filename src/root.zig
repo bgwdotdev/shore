@@ -1,35 +1,17 @@
 const std = @import("std");
 const erl = @cImport(@cInclude("erl_nif.h"));
-const c = @cImport({
-    @cInclude("termios.h");
-    @cInclude("unistd.h");
-});
 
 fn setCbreak() !void {
-    const fd = c.STDIN_FILENO;
-    var termios: c.struct_termios = undefined;
     const tty = try std.fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
     defer tty.close();
     var term = try std.posix.tcgetattr(tty.handle);
     term.lflag.ECHO = false;
     term.lflag.ICANON = false;
-    termios.c_cc[c.VMIN] = 1;
-    termios.c_cc[c.VTIME] = 0;
-    _ = c.tcsetattr(fd, c.TCSANOW, &termios);
+    term.cc[@intFromEnum(std.posix.V.MIN)] = 1;
+    term.cc[@intFromEnum(std.posix.V.TIME)] = 0;
+    try std.posix.tcsetattr(tty.handle, std.posix.TCSA.NOW, term);
 }
 
-fn setsane() !void {
-    const fd = c.STDIN_FILENO;
-    var termios: c.struct_termios = undefined;
-    const tty = try std.fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
-    defer tty.close();
-    var term = try std.posix.tcgetattr(tty.handle);
-    term.lflag.ECHO = true;
-    term.lflag.ICANON = true;
-    //termios.c_cc[c.VMIN] = 1;
-    //termios.c_cc[c.VTIME] = 0;
-    _ = c.tcsetattr(fd, c.TCSANOW, &termios);
-}
 //
 // FFI
 //
@@ -38,16 +20,6 @@ export fn setCbreak_nif(env: ?*erl.ErlNifEnv, argc: c_int, argv: [*c]const erl.E
     _ = argv;
     var i: i32 = 0;
     setCbreak() catch {
-        i = 1;
-    };
-    return erl.enif_make_int(env, i);
-}
-
-export fn setsane_nif(env: ?*erl.ErlNifEnv, argc: c_int, argv: [*c]const erl.ERL_NIF_TERM) erl.ERL_NIF_TERM {
-    _ = argc;
-    _ = argv;
-    var i: i32 = 0;
-    setsane() catch {
         i = 1;
     };
     return erl.enif_make_int(env, i);
@@ -68,11 +40,6 @@ export var nif_funcs = [_]erl.ErlNifFunc{ .{
     .name = "setCbreak_nif",
     .arity = 0,
     .fptr = setCbreak_nif,
-    .flags = 0,
-}, .{
-    .name = "setsane_nif",
-    .arity = 0,
-    .fptr = setsane_nif,
     .flags = 0,
 } };
 
