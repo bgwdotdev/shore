@@ -2,6 +2,7 @@ import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
 import gleam/int
 import gleam/io
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/pair
@@ -32,16 +33,12 @@ fn start(spec: Spec(model)) {
 }
 
 fn elm_start(spec: Spec(model)) {
+  let _on_init = spec.model |> spec.view |> render
   actor.start(spec, event_loop_actor)
 }
 
 type Spec(model) {
-  Spec(
-    model: model,
-    init: fn() -> model,
-    view: fn(model) -> Node,
-    update: fn(model, Msg) -> model,
-  )
+  Spec(model: model, view: fn(model) -> Node, update: fn(model, Msg) -> model)
 }
 
 //
@@ -49,7 +46,7 @@ type Spec(model) {
 //
 
 fn elm_main() {
-  Spec(model: init(), init:, view:, update:) |> start
+  Spec(model: init(), view:, update:) |> start
 }
 
 type Model {
@@ -73,11 +70,16 @@ fn update(model: Model, msg: Msg) -> Model {
 }
 
 fn view(model: Model) -> Node {
-  Div([
-    model.counter |> int.to_string |> Text,
-    Button("increment", "a", Increment),
-    Button("decrement", "b", Decrement),
-  ])
+  Div(
+    [
+      "HELLO WORLD" |> Text,
+      HR,
+      model.counter |> int.to_string |> Text,
+      BR,
+      Div([Button("++", "a", Increment), Button("--", "b", Decrement)], Row),
+    ],
+    Col,
+  )
 }
 
 //
@@ -87,10 +89,11 @@ fn view(model: Model) -> Node {
 fn detect_event(node: Node, input: String) -> Option(Msg) {
   case node {
     Input -> None
+    HR | BR -> None
     Text(_) -> None
     Button(_, key, event) if input == key -> Some(event)
     Button(_, _, _) -> None
-    Div(children) -> do_detect_event(children, input)
+    Div(children, _) -> do_detect_event(children, input)
   }
 }
 
@@ -103,21 +106,6 @@ fn do_detect_event(children: List(Node), input: String) -> Option(Msg) {
         None -> do_detect_event(xs, input)
       }
   }
-}
-
-// TODO: pass model/view/update as a type
-fn event_loop(model: Model, input: String) {
-  let ui = view(model)
-  case detect_event(ui, input) {
-    Some(msg) -> {
-      // TODO: send to subject and return model??
-      let model = update(model, msg)
-      model |> view |> render
-      model
-    }
-    None -> model
-  }
-  // TODO: actor.continue
 }
 
 fn event_loop_actor(input: String, spec: Spec(model)) {
@@ -135,8 +123,39 @@ fn event_loop_actor(input: String, spec: Spec(model)) {
 }
 
 fn render(node: Node) {
-  Clear |> terminal
-  echo node
+  node |> render_node |> printer
+}
+
+@external(erlang, "shore_ffi", "printer")
+fn printer(input: String) -> Nil
+
+//fn do_render_node(node: List(Node), acc: List(String)) -> String {
+//  case node {
+//    [] -> acc
+//    [x, ..xs] -> {
+//      render_node(x)
+//    }
+//  }
+//}
+
+fn render_node(node: Node) -> String {
+  case node {
+    Div(children, separator) ->
+      list.map(children, render_node) |> string.join(sep(separator))
+    //do_render_node(children)
+    Button(text, _, _) -> draw_btn(Btn(10, 1, text))
+    Text(text) -> text
+    HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
+    BR -> "\n"
+    _ -> ""
+  }
+}
+
+fn sep(separator: Separator) -> String {
+  case separator {
+    Row -> " "
+    Col -> "\n"
+  }
 }
 
 //
@@ -158,9 +177,16 @@ fn read_input(elm) {
 
 type Node {
   Input
+  HR
+  BR
   Text(text: String)
   Button(text: String, key: String, event: Msg)
-  Div(List(Node))
+  Div(children: List(Node), separator: Separator)
+}
+
+type Separator {
+  Row
+  Col
 }
 
 fn do_middle(height: Int, acc: List(String)) -> String {
@@ -174,6 +200,31 @@ fn middle() -> String {
   let fill = " "
   let width = 30
   ["│", string.repeat(fill, width), "│"] |> string.join("")
+}
+
+type Btn {
+  Btn(width: Int, height: Int, text: String)
+}
+
+fn draw_btn(btn: Btn) -> String {
+  let padding = { btn.width - string.length(btn.text) } / 2
+  let top = fn() {
+    ["╭", string.repeat("─", btn.width), "╮"] |> string.join("")
+  }
+  let middle = fn() {
+    [
+      "│",
+      string.repeat(" ", padding),
+      btn.text,
+      string.repeat(" ", padding),
+      "│",
+    ]
+    |> string.join("")
+  }
+  let bottom = fn() {
+    ["╰", string.repeat("─", btn.width), "╯"] |> string.join("")
+  }
+  [top(), middle(), bottom()] |> string.join("\n")
 }
 
 fn draw(node: Node) -> String {
@@ -223,9 +274,41 @@ fn do_cmd(input: Charlist) -> Charlist
 @external(erlang, "shore_ffi", "terminal")
 fn terminal(code: TermCode) -> Charlist
 
+@external(erlang, "shore_ffi", "get_pos")
+fn do_get_pos() -> Charlist
+
+fn get_pos() -> #(Int, Int) {
+  do_get_pos()
+  |> echo
+  |> charlist.to_string()
+  |> string.drop_start(2)
+  |> string.drop_end(1)
+  |> string.split(";")
+  |> list.map(int.parse)
+  |> fn(i) {
+    case i {
+      [Ok(a), Ok(b)] -> #(a, b)
+      fixme -> {
+        fixme |> echo
+        #(-1, -1)
+      }
+    }
+  }
+}
+
+type TODO
+
+@external(erlang, "io", "rows")
+fn terminal_rows() -> Result(Int, TODO)
+
+@external(erlang, "io", "columns")
+fn terminal_columns() -> Result(Int, TODO)
+
 type TermCode {
   Clear
   Top
+  HideCursor
+  ShowCursor
   Pos(x: Int, y: Int)
   Up(Int)
   Down(Int)

@@ -1,6 +1,6 @@
 -module(shore_ffi).
 
--export([hello_nif/0, setCbreak_nif/0, cmd/1, terminal/1]).
+-export([hello_nif/0, setCbreak_nif/0, cmd/1, terminal/1, get_pos/0, printer/1]).
 
 -nifs([hello_nif/0, setCbreak_nif/0]).
 
@@ -22,6 +22,8 @@ terminal(Code) ->
   Input = case Code of
     clear -> "\e[2J\e[H";
     top -> "\033[H";
+    hidecursor -> "\e[?25l";
+    showcursor -> "\e[?25h";
     {pos, X, Y} -> io_lib:format("\033[~w;~wH", [X, Y]);
     {up, I} -> io_lib:format("\033[~wA", [I]);
     {down, I} -> io_lib:format("\033[~wB", [I]);
@@ -30,3 +32,10 @@ terminal(Code) ->
   end,
   io:format(Input).
 
+get_pos() ->
+  io:put_chars("\e[6n"),
+  Pos = io:get_line(""),
+  Pos.
+
+printer(Input) ->
+  io:format("\e[?25l\e[2J\e[H~ts", [Input]).
