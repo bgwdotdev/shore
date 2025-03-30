@@ -1,3 +1,5 @@
+////process.start(read_input, False)
+
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
 import gleam/int
@@ -11,17 +13,20 @@ import gleam/string
 
 pub fn main_old() {
   io.println("Hello from shore!")
-  Clear |> c |> io.print
-  set_cbreak() |> echo
-  draw(Input) |> io.println
-  Pos(15, 10) |> c |> io.print
-  draw(Input) |> io.println
-  //process.start(read_input, False)
+
+  hello_nif()
+  size() |> echo
+  //Clear |> c |> io.print
+  //set_cbreak() |> echo
+  //draw(Input) |> io.println
+  //Pos(15, 10) |> c |> io.print
+  //draw(Input) |> io.println
   process.sleep_forever()
 }
 
 pub fn main() {
   elm_main()
+  //main_old()
   Nil
 }
 
@@ -72,11 +77,23 @@ fn update(model: Model, msg: Msg) -> Model {
 fn view(model: Model) -> Node {
   Div(
     [
-      "HELLO WORLD" |> Text,
+      "HELLO WORLD" |> Text(None),
       HR,
-      model.counter |> int.to_string |> Text,
+      model.counter |> int.to_string |> Text(Some(Black)),
+      model.counter |> int.to_string |> Text(Some(Red)),
+      model.counter |> int.to_string |> Text(Some(Green)),
+      model.counter |> int.to_string |> Text(Some(Yellow)),
+      model.counter |> int.to_string |> Text(Some(Blue)),
+      model.counter |> int.to_string |> Text(Some(Magenta)),
+      model.counter |> int.to_string |> Text(Some(Cyan)),
+      model.counter |> int.to_string |> Text(Some(White)),
       BR,
       Div([Button("++", "a", Increment), Button("--", "b", Decrement)], Row),
+      case model.counter {
+        x if x > 10 && x < 20 -> Button("cc", "c", Increment)
+        x if x > 20 -> Button("dd", "d", Increment)
+        x -> Text("x", Some(Red))
+      },
     ],
     Col,
   )
@@ -90,7 +107,7 @@ fn detect_event(node: Node, input: String) -> Option(Msg) {
   case node {
     Input -> None
     HR | BR -> None
-    Text(_) -> None
+    Text(_, _) -> None
     Button(_, key, event) if input == key -> Some(event)
     Button(_, _, _) -> None
     Div(children, _) -> do_detect_event(children, input)
@@ -123,6 +140,7 @@ fn event_loop_actor(input: String, spec: Spec(model)) {
 }
 
 fn render(node: Node) {
+  let _size = size()
   { c(Clear) <> node |> render_node }
   |> io.print
 }
@@ -131,9 +149,11 @@ fn render_node(node: Node) -> String {
   case node {
     Div(children, separator) ->
       list.map(children, render_node) |> string.join(sep(separator))
-    //do_render_node(children)
     Button(text, _, _) -> draw_btn(Btn(10, 1, text))
-    Text(text) -> text
+    Text(text, fg) ->
+      { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+      <> text
+      <> c(Reset)
     HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
     BR -> "\n"
     _ -> ""
@@ -151,7 +171,10 @@ fn sep(separator: Separator) -> String {
 // RUNTIME
 //
 
-@external(erlang, "shore_ffi", "setCbreak_nif")
+@external(erlang, "shore_ffi", "size_nif")
+fn size() -> #(Int, Int)
+
+@external(erlang, "shore_ffi", "cbreak_nif")
 fn set_cbreak() -> Nil
 
 type Data
@@ -168,7 +191,7 @@ type Node {
   Input
   HR
   BR
-  Text(text: String)
+  Text(text: String, fg: Option(Color))
   Button(text: String, key: String, event: Msg)
   Div(children: List(Node), separator: Separator)
 }
@@ -306,6 +329,9 @@ type TermCode {
   Down(Int)
   Left(Int)
   Right(Int)
+  Fg(Color)
+  Bg(Color)
+  Reset
 }
 
 fn c(code: TermCode) -> String {
@@ -320,8 +346,39 @@ fn c(code: TermCode) -> String {
     Down(i) -> esc <> "[" <> int.to_string(i) <> "B"
     Left(i) -> esc <> "[" <> int.to_string(i) <> "D"
     Right(i) -> esc <> "[" <> int.to_string(i) <> "C"
+    Fg(color) -> esc <> "[3" <> col(color) <> "m"
+    Bg(color) -> esc <> "[4" <> col(color) <> "m"
+    Reset -> esc <> "[0m"
   }
 }
+
+type Color {
+  Black
+  Red
+  Green
+  Yellow
+  Blue
+  Magenta
+  Cyan
+  White
+}
+
+fn col(color: Color) -> String {
+  case color {
+    Black -> "0"
+    Red -> "1"
+    Green -> "2"
+    Yellow -> "3"
+    Blue -> "4"
+    Magenta -> "5"
+    Cyan -> "6"
+    White -> "7"
+  }
+}
+
+//
+// DELETE THIS PROBABLY?
+//
 
 fn cmd(input: String) -> String {
   input

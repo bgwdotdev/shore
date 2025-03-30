@@ -1,7 +1,33 @@
 const std = @import("std");
 const erl = @cImport(@cInclude("erl_nif.h"));
 
-fn setCbreak() !void {
+//
+// FUNC
+//
+
+fn size() std.posix.winsize {
+    var ws: std.posix.winsize = undefined;
+    _ = std.os.linux.ioctl(std.os.linux.STDOUT_FILENO, std.os.linux.T.IOCGWINSZ, @intFromPtr(&ws));
+    sigwinch();
+
+    return ws;
+}
+
+fn sigwinch() void {
+    var act: std.posix.Sigaction = .{
+        .handler = .{ .handler = sigwinch_handler },
+        .mask = std.posix.empty_sigset,
+        .flags = 0,
+    };
+    std.posix.sigaction(std.os.linux.SIG.WINCH, &act, null);
+}
+
+fn sigwinch_handler(sig: i32) callconv(.c) void {
+    _ = sig;
+    std.debug.print("resized!", .{});
+}
+
+fn cbreak() !void {
     const tty = try std.fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
     defer tty.close();
     var term = try std.posix.tcgetattr(tty.handle);
@@ -15,11 +41,19 @@ fn setCbreak() !void {
 //
 // FFI
 //
-export fn setCbreak_nif(env: ?*erl.ErlNifEnv, argc: c_int, argv: [*c]const erl.ERL_NIF_TERM) erl.ERL_NIF_TERM {
+
+export fn size_nif(env: ?*erl.ErlNifEnv, argc: c_int, argv: [*c]const erl.ERL_NIF_TERM) erl.ERL_NIF_TERM {
+    _ = argc;
+    _ = argv;
+    const ws = size();
+    return erl.enif_make_tuple2(env, erl.enif_make_int(env, ws.row), erl.enif_make_int(env, ws.col));
+}
+
+export fn cbreak_nif(env: ?*erl.ErlNifEnv, argc: c_int, argv: [*c]const erl.ERL_NIF_TERM) erl.ERL_NIF_TERM {
     _ = argc;
     _ = argv;
     var i: i32 = 0;
-    setCbreak() catch {
+    cbreak() catch {
         i = 1;
     };
     return erl.enif_make_int(env, i);
@@ -28,6 +62,7 @@ export fn setCbreak_nif(env: ?*erl.ErlNifEnv, argc: c_int, argv: [*c]const erl.E
 export fn hello_nif(env: ?*erl.ErlNifEnv, argc: c_int, argv: [*c]const erl.ERL_NIF_TERM) erl.ERL_NIF_TERM {
     _ = argc;
     _ = argv;
+    sigwinch();
     return erl.enif_make_int(env, 10);
 }
 
@@ -37,9 +72,14 @@ export var nif_funcs = [_]erl.ErlNifFunc{ .{
     .fptr = hello_nif,
     .flags = 0,
 }, .{
-    .name = "setCbreak_nif",
+    .name = "cbreak_nif",
     .arity = 0,
-    .fptr = setCbreak_nif,
+    .fptr = cbreak_nif,
+    .flags = 0,
+}, .{
+    .name = "size_nif",
+    .arity = 0,
+    .fptr = size_nif,
     .flags = 0,
 } };
 
