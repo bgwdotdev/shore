@@ -1,5 +1,6 @@
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
+import gleam/function
 import gleam/int
 import gleam/io
 import gleam/list
@@ -34,13 +35,30 @@ fn start(spec: Spec(model)) {
 }
 
 fn elm_start(spec: Spec(model)) {
-  let state = State(spec:, mode: Normal, last_input: "", focused: "")
-  let _on_init = spec.model |> spec.view |> render(state, _, "")
-  actor.start(state, event_loop_actor)
+  actor.Spec(
+    init: fn() {
+      let tasks = process.new_subject()
+      let state =
+        State(spec:, tasks:, mode: Normal, last_input: "", focused: "")
+      let _first_paint = spec.model |> spec.view |> render(state, _, "")
+      let sel =
+        process.new_selector() |> process.selecting(tasks, function.identity)
+      actor.Ready(state, sel)
+    },
+    init_timeout: 1000,
+    loop: event_loop_actor,
+  )
+  |> actor.start_spec
 }
 
 type State(model) {
-  State(spec: Spec(model), mode: Mode, last_input: String, focused: String)
+  State(
+    spec: Spec(model),
+    tasks: process.Subject(Event),
+    mode: Mode,
+    last_input: String,
+    focused: String,
+  )
 }
 
 type Mode {
@@ -123,36 +141,46 @@ fn view(model: Model) -> Node {
 // EVENT BUS(?)
 //
 
-fn event_loop_actor(input: String, state: State(model)) {
-  let ui = state.spec.view(state.spec.model)
-  let state = case control_event(input) {
-    FocusClear -> State(..state, focused: "")
-    FocusPrev -> {
-      let focusable = list_focusable([ui], [])
-      let focused = case state.focused {
-        "" -> focusable |> list.first |> result.unwrap("")
-        x -> focusable |> focus_next(x, False)
+type Event {
+  KeyPress(input: String)
+  Cmd
+}
+
+fn event_loop_actor(event: Event, state: State(model)) {
+  case event {
+    Cmd -> actor.continue(state)
+    KeyPress(input) -> {
+      let ui = state.spec.view(state.spec.model)
+      let state = case control_event(input) {
+        FocusClear -> State(..state, focused: "")
+        FocusPrev -> {
+          let focusable = list_focusable([ui], [])
+          let focused = case state.focused {
+            "" -> focusable |> list.first |> result.unwrap("")
+            x -> focusable |> focus_next(x, False)
+          }
+          State(..state, focused:)
+        }
+        FocusNext -> {
+          let focusable = list_focusable([ui], []) |> list.reverse
+          let focused = case state.focused {
+            "" -> focusable |> list.first |> result.unwrap("")
+            x -> focusable |> focus_next(x, False)
+          }
+          State(..state, focused:)
+        }
+        PassInput(input) -> {
+          let model = case detect_event(state, ui, input) {
+            Some(msg) -> state.spec.update(state.spec.model, msg)
+            None -> state.spec.model
+          }
+          State(..state, spec: Spec(..state.spec, model: model))
+        }
       }
-      State(..state, focused:)
-    }
-    FocusNext -> {
-      let focusable = list_focusable([ui], []) |> list.reverse
-      let focused = case state.focused {
-        "" -> focusable |> list.first |> result.unwrap("")
-        x -> focusable |> focus_next(x, False)
-      }
-      State(..state, focused:)
-    }
-    PassInput(input) -> {
-      let model = case detect_event(state, ui, input) {
-        Some(msg) -> state.spec.update(state.spec.model, msg)
-        None -> state.spec.model
-      }
-      State(..state, spec: Spec(..state.spec, model: model))
+      state.spec.model |> state.spec.view |> render(state, _, input)
+      actor.continue(state)
     }
   }
-  state.spec.model |> state.spec.view |> render(state, _, input)
-  actor.continue(state)
 }
 
 type Control {
@@ -267,7 +295,7 @@ fn get_line(prompt: String) -> Charlist
 fn get_chars(prompt: String, count: Int) -> String
 
 fn read_input(elm) {
-  get_chars("", 1) |> process.send(elm, _)
+  get_chars("", 1) |> KeyPress |> process.send(elm, _)
   read_input(elm)
 }
 
