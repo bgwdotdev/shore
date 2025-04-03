@@ -13,7 +13,7 @@
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
               gleam
-              erlang_27
+              erlang_28
               zig
             ];
             ERL_LIB = "${pkgs.erlang_27}/lib/erlang/lib";

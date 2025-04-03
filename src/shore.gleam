@@ -29,8 +29,10 @@ pub fn main() {
 }
 
 fn start(spec: Spec(model)) {
-  set_cbreak()
+  raw_erl()
+  //set_cbreak()
   let assert Ok(elm) = elm_start(spec)
+  //let elm = process.new_subject()
   process.start(fn() { read_input(elm) }, False)
   process.sleep_forever()
 }
@@ -87,6 +89,10 @@ fn view(model: Model) -> Node {
   Div(
     [
       "HELLO WORLD" |> Text(None),
+      terminal_columns()
+        |> result.map(int.to_string)
+        |> result.unwrap("")
+        |> Text(None),
       HR,
       Input("hi"),
       BR,
@@ -250,8 +256,8 @@ fn render_node(state: State(model), node: Node, last_input: String) -> String {
 
 fn sep(separator: Separator) -> String {
   case separator {
-    Row -> " "
-    Col -> "\n"
+    Row -> c(Right(1))
+    Col -> c(Down(1)) <> c(StartLine)
   }
 }
 
@@ -425,6 +431,8 @@ type TermCode {
   Down(Int)
   Left(Int)
   Right(Int)
+  StartLine
+  Column(Int)
   Fg(Color)
   Bg(Color)
   Reset
@@ -442,6 +450,8 @@ fn c(code: TermCode) -> String {
     Down(i) -> esc <> "[" <> int.to_string(i) <> "B"
     Left(i) -> esc <> "[" <> int.to_string(i) <> "D"
     Right(i) -> esc <> "[" <> int.to_string(i) <> "C"
+    StartLine -> Column(1) |> c
+    Column(i) -> esc <> "[" <> int.to_string(i) <> "G"
     Fg(color) -> esc <> "[3" <> col(color) <> "m"
     Bg(color) -> esc <> "[4" <> col(color) <> "m"
     Reset -> esc <> "[0m"
@@ -482,6 +492,22 @@ fn cmd(input: String) -> String {
   |> do_cmd
   |> charlist.to_string
 }
+
+type ShellOpt {
+  Noshell
+  Raw
+}
+
+type ShellError {
+  AlreadyStarted
+}
+
+fn raw_erl() {
+  raw_ffi(#(Noshell, Raw))
+}
+
+@external(erlang, "shell", "start_interactive")
+fn raw_ffi(opts: #(ShellOpt, ShellOpt)) -> Result(Nil, ShellError)
 
 fn raw() -> String {
   cmd("stty raw -echo")
