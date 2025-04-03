@@ -1,5 +1,3 @@
-////process.start(read_input, False)
-
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
 import gleam/int
@@ -38,8 +36,13 @@ fn start(spec: Spec(model)) {
 }
 
 fn elm_start(spec: Spec(model)) {
-  let _on_init = spec.model |> spec.view |> render
-  actor.start(spec, event_loop_actor)
+  let _on_init = spec.model |> spec.view |> render("")
+  let state = State(spec:, last_input: "")
+  actor.start(state, event_loop_actor)
+}
+
+type State(model) {
+  State(spec: Spec(model), last_input: String)
 }
 
 type Spec(model) {
@@ -105,7 +108,7 @@ fn view(model: Model) -> Node {
 
 fn detect_event(node: Node, input: String) -> Option(Msg) {
   case node {
-    Input -> None
+    Input(_) -> None
     HR | BR -> None
     Text(_, _) -> None
     Button(_, key, event) if input == key -> Some(event)
@@ -125,31 +128,33 @@ fn do_detect_event(children: List(Node), input: String) -> Option(Msg) {
   }
 }
 
-fn event_loop_actor(input: String, spec: Spec(model)) {
-  let ui = spec.view(spec.model)
+fn event_loop_actor(input: String, state: State(model)) {
+  let ui = state.spec.view(state.spec.model)
   let model = case detect_event(ui, input) {
     Some(msg) -> {
       // TODO: send to subject and return model??
-      let model = spec.update(spec.model, msg)
-      model |> spec.view |> render
+      let model = state.spec.update(state.spec.model, msg)
+      model |> state.spec.view |> render(input)
       model
     }
-    None -> spec.model
+    None -> state.spec.model
   }
-  actor.continue(Spec(..spec, model: model))
+  let state = State(..state, spec: Spec(..state.spec, model: model))
+  actor.continue(state)
 }
 
-fn render(node: Node) {
+fn render(node: Node, last_input: String) {
   let _size = size()
-  { c(Clear) <> node |> render_node }
+  { c(Clear) <> node |> render_node(last_input) }
   |> io.print
 }
 
-fn render_node(node: Node) -> String {
+fn render_node(node: Node, last_input: String) -> String {
   case node {
     Div(children, separator) ->
-      list.map(children, render_node) |> string.join(sep(separator))
-    Button(text, _, _) -> draw_btn(Btn(10, 1, text))
+      list.map(children, render_node(_, last_input))
+      |> string.join(sep(separator))
+    Button(text, input, _) -> draw_btn(Btn(10, 1, text, last_input == input))
     Text(text, fg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
       <> text
@@ -188,7 +193,7 @@ fn read_input(elm) {
 }
 
 type Node {
-  Input
+  Input(label: String)
   HR
   BR
   Text(text: String, fg: Option(Color))
@@ -215,7 +220,7 @@ fn middle() -> String {
 }
 
 type Btn {
-  Btn(width: Int, height: Int, text: String)
+  Btn(width: Int, height: Int, text: String, pressed: Bool)
 }
 
 fn draw_btn(btn: Btn) -> String {
@@ -236,7 +241,15 @@ fn draw_btn(btn: Btn) -> String {
   let bottom = fn() {
     ["╰", string.repeat("─", btn.width), "╯"] |> string.join("")
   }
-  [top(), middle(), bottom()] |> string.join("\n")
+  let width = btn.width + 2
+  let start = c(Left(width)) <> c(Down(1))
+  let top_right = c(Up(1 + btn.height))
+  let colour = case btn.pressed {
+    True -> Blue |> Fg |> c
+    False -> White |> Fg |> c
+  }
+  [colour, top(), start, middle(), start, bottom(), top_right, Reset |> c]
+  |> string.join("")
 }
 
 fn draw(node: Node) -> String {
