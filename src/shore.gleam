@@ -22,19 +22,19 @@ pub fn main_old() {
 }
 
 pub fn main() {
-  elm_main()
+  //elm_main()
   //main_old()
   Nil
 }
 
-fn start(spec: Spec(model)) {
+pub fn start(spec: Spec(model, msg)) {
   raw_erl()
   let assert Ok(elm) = elm_start(spec)
   process.start(fn() { read_input(elm) }, False)
   process.sleep_forever()
 }
 
-fn elm_start(spec: Spec(model)) {
+fn elm_start(spec: Spec(model, msg)) {
   actor.Spec(
     init: fn() {
       let tasks = process.new_subject()
@@ -51,9 +51,9 @@ fn elm_start(spec: Spec(model)) {
   |> actor.start_spec
 }
 
-type State(model) {
+type State(model, msg) {
   State(
-    spec: Spec(model),
+    spec: Spec(model, msg),
     tasks: process.Subject(Event),
     mode: Mode,
     last_input: String,
@@ -67,73 +67,11 @@ type Mode {
   Focus
 }
 
-type Spec(model) {
-  Spec(model: model, view: fn(model) -> Node, update: fn(model, Msg) -> model)
-}
-
-//
-// ELM
-//
-
-fn elm_main() {
-  Spec(model: init(), view:, update:) |> start
-}
-
-type Model {
-  Model(counter: Int)
-}
-
-fn init() -> Model {
-  Model(counter: 0)
-}
-
-type Msg {
-  Increment
-  Decrement
-}
-
-fn update(model: Model, msg: Msg) -> Model {
-  case msg {
-    Increment -> Model(model.counter + 1)
-    Decrement -> Model(model.counter - 1)
-  }
-}
-
-fn view(model: Model) -> Node {
-  Div(
-    [
-      "HELLO WORLD" |> Text(None),
-      terminal_columns()
-        |> result.map(int.to_string)
-        |> result.unwrap("")
-        |> Text(None),
-      HR,
-      Input("hi"),
-      BR,
-      BR,
-      Input("bye"),
-      BR,
-      BR,
-      Input("try"),
-      BR,
-      BR,
-      model.counter |> int.to_string |> Text(Some(Black)),
-      model.counter |> int.to_string |> Text(Some(Red)),
-      model.counter |> int.to_string |> Text(Some(Green)),
-      model.counter |> int.to_string |> Text(Some(Yellow)),
-      model.counter |> int.to_string |> Text(Some(Blue)),
-      model.counter |> int.to_string |> Text(Some(Magenta)),
-      model.counter |> int.to_string |> Text(Some(Cyan)),
-      model.counter |> int.to_string |> Text(Some(White)),
-      BR,
-      Div([Button("++", "a", Increment), Button("--", "b", Decrement)], Row),
-      case model.counter {
-        x if x > 10 && x < 20 -> Button("cc", "c", Increment)
-        x if x > 20 -> Button("dd", "d", Increment)
-        x -> Text("x", Some(Red))
-      },
-    ],
-    Col,
+pub type Spec(model, msg) {
+  Spec(
+    model: model,
+    view: fn(model) -> Node(msg),
+    update: fn(model, msg) -> model,
   )
 }
 
@@ -146,7 +84,7 @@ type Event {
   Cmd
 }
 
-fn event_loop_actor(event: Event, state: State(model)) {
+fn event_loop_actor(event: Event, state: State(model, msg)) {
   case event {
     Cmd -> actor.continue(state)
     KeyPress(input) -> {
@@ -202,7 +140,7 @@ fn control_event(input: String) -> Control {
   }
 }
 
-fn list_focusable(children: List(Node), acc: List(String)) -> List(String) {
+fn list_focusable(children: List(Node(msg)), acc: List(String)) -> List(String) {
   case children {
     [] -> acc
     [x, ..xs] ->
@@ -229,7 +167,11 @@ fn focus_next(focusable: List(String), focused: String, next: Bool) -> String {
   }
 }
 
-fn detect_event(state: State(model), node: Node, input: String) -> Option(Msg) {
+fn detect_event(
+  state: State(model, msg),
+  node: Node(msg),
+  input: String,
+) -> Option(msg) {
   case node {
     Input(_) -> None
     HR | BR -> None
@@ -241,10 +183,10 @@ fn detect_event(state: State(model), node: Node, input: String) -> Option(Msg) {
 }
 
 fn do_detect_event(
-  state: State(model),
-  children: List(Node),
+  state: State(model, msg),
+  children: List(Node(msg)),
   input: String,
-) -> Option(Msg) {
+) -> Option(msg) {
   case children {
     [] -> None
     [x, ..xs] ->
@@ -255,12 +197,16 @@ fn do_detect_event(
   }
 }
 
-fn render(state: State(model), node: Node, last_input: String) {
+fn render(state: State(model, msg), node: Node(msg), last_input: String) {
   { c(Clear) <> node |> render_node(state, _, last_input) }
   |> io.print
 }
 
-fn render_node(state: State(model), node: Node, last_input: String) -> String {
+fn render_node(
+  state: State(model, msg),
+  node: Node(msg),
+  last_input: String,
+) -> String {
   case node {
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input))
@@ -299,16 +245,16 @@ fn read_input(elm) {
   read_input(elm)
 }
 
-type Node {
+pub type Node(msg) {
   Input(label: String)
   HR
   BR
   Text(text: String, fg: Option(Color))
-  Button(text: String, key: String, event: Msg)
-  Div(children: List(Node), separator: Separator)
+  Button(text: String, key: String, event: msg)
+  Div(children: List(Node(msg)), separator: Separator)
 }
 
-type Separator {
+pub type Separator {
   Row
   Col
 }
@@ -359,7 +305,7 @@ fn draw_btn(btn: Btn) -> String {
   |> string.join("")
 }
 
-fn draw(node: Node) -> String {
+fn draw(node: Node(msg)) -> String {
   let width = 30
   let height = 1
   let fill = "█"
@@ -470,7 +416,7 @@ fn c(code: TermCode) -> String {
   }
 }
 
-type Color {
+pub type Color {
   Black
   Red
   Green
