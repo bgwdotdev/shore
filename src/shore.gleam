@@ -36,13 +36,19 @@ fn start(spec: Spec(model)) {
 }
 
 fn elm_start(spec: Spec(model)) {
-  let _on_init = spec.model |> spec.view |> render("")
-  let state = State(spec:, last_input: "")
+  let state = State(spec:, mode: Normal, last_input: "", focused: "")
+  let _on_init = spec.model |> spec.view |> render(state, _, "")
   actor.start(state, event_loop_actor)
 }
 
 type State(model) {
-  State(spec: Spec(model), last_input: String)
+  State(spec: Spec(model), mode: Mode, last_input: String, focused: String)
+}
+
+type Mode {
+  Insert
+  Normal
+  Focus
 }
 
 type Spec(model) {
@@ -82,6 +88,15 @@ fn view(model: Model) -> Node {
     [
       "HELLO WORLD" |> Text(None),
       HR,
+      Input("hi"),
+      BR,
+      BR,
+      Input("bye"),
+      BR,
+      BR,
+      Input("try"),
+      BR,
+      BR,
       model.counter |> int.to_string |> Text(Some(Black)),
       model.counter |> int.to_string |> Text(Some(Red)),
       model.counter |> int.to_string |> Text(Some(Green)),
@@ -106,55 +121,123 @@ fn view(model: Model) -> Node {
 // EVENT BUS(?)
 //
 
-fn detect_event(node: Node, input: String) -> Option(Msg) {
+fn event_loop_actor(input: String, state: State(model)) {
+  let ui = state.spec.view(state.spec.model)
+  let state = case control_event(input) {
+    FocusClear -> State(..state, focused: "")
+    FocusPrev -> {
+      let focusable = list_focusable([ui], [])
+      let focused = case state.focused {
+        "" -> focusable |> list.first |> result.unwrap("")
+        x -> focusable |> focus_next(x, False)
+      }
+      State(..state, focused:)
+    }
+    FocusNext -> {
+      let focusable = list_focusable([ui], []) |> list.reverse
+      let focused = case state.focused {
+        "" -> focusable |> list.first |> result.unwrap("")
+        x -> focusable |> focus_next(x, False)
+      }
+      State(..state, focused:)
+    }
+    PassInput(input) -> {
+      let model = case detect_event(state, ui, input) {
+        Some(msg) -> state.spec.update(state.spec.model, msg)
+        None -> state.spec.model
+      }
+      State(..state, spec: Spec(..state.spec, model: model))
+    }
+  }
+  state.spec.model |> state.spec.view |> render(state, _, input)
+  actor.continue(state)
+}
+
+type Control {
+  FocusClear
+  FocusNext
+  FocusPrev
+  //Quit
+  PassInput(String)
+}
+
+fn control_event(input: String) -> Control {
+  case input {
+    "J" -> FocusNext
+    "K" -> FocusPrev
+    //"f" -> todo
+    //"Q" -> quit
+    "\u{001b}" -> FocusClear
+    x -> PassInput(x)
+  }
+}
+
+fn list_focusable(children: List(Node), acc: List(String)) -> List(String) {
+  case children {
+    [] -> acc
+    [x, ..xs] ->
+      case x {
+        Div(children, _) -> {
+          //let append = list_focusable(children, [])
+          //list_focusable(xs, list.append(append, acc))
+          list_focusable(xs, list_focusable(children, acc))
+        }
+        Input(label) -> list_focusable(xs, [label, ..acc])
+        _ -> list_focusable(xs, acc)
+      }
+  }
+}
+
+fn focus_next(focusable: List(String), focused: String, next: Bool) -> String {
+  case focusable {
+    [] -> ""
+    [x, ..xs] ->
+      case next {
+        True -> x
+        False -> focus_next(xs, focused, x == focused)
+      }
+  }
+}
+
+fn detect_event(state: State(model), node: Node, input: String) -> Option(Msg) {
   case node {
     Input(_) -> None
     HR | BR -> None
     Text(_, _) -> None
     Button(_, key, event) if input == key -> Some(event)
     Button(_, _, _) -> None
-    Div(children, _) -> do_detect_event(children, input)
+    Div(children, _) -> do_detect_event(state, children, input)
   }
 }
 
-fn do_detect_event(children: List(Node), input: String) -> Option(Msg) {
+fn do_detect_event(
+  state: State(model),
+  children: List(Node),
+  input: String,
+) -> Option(Msg) {
   case children {
     [] -> None
     [x, ..xs] ->
-      case detect_event(x, input) {
+      case detect_event(state, x, input) {
         Some(msg) -> Some(msg)
-        None -> do_detect_event(xs, input)
+        None -> do_detect_event(state, xs, input)
       }
   }
 }
 
-fn event_loop_actor(input: String, state: State(model)) {
-  let ui = state.spec.view(state.spec.model)
-  let model = case detect_event(ui, input) {
-    Some(msg) -> {
-      // TODO: send to subject and return model??
-      let model = state.spec.update(state.spec.model, msg)
-      model |> state.spec.view |> render(input)
-      model
-    }
-    None -> state.spec.model
-  }
-  let state = State(..state, spec: Spec(..state.spec, model: model))
-  actor.continue(state)
-}
-
-fn render(node: Node, last_input: String) {
+fn render(state: State(model), node: Node, last_input: String) {
   let _size = size()
-  { c(Clear) <> node |> render_node(last_input) }
+  { c(Clear) <> node |> render_node(state, _, last_input) }
   |> io.print
 }
 
-fn render_node(node: Node, last_input: String) -> String {
+fn render_node(state: State(model), node: Node, last_input: String) -> String {
   case node {
     Div(children, separator) ->
-      list.map(children, render_node(_, last_input))
+      list.map(children, render_node(state, _, last_input))
       |> string.join(sep(separator))
     Button(text, input, _) -> draw_btn(Btn(10, 1, text, last_input == input))
+    Input(label) -> draw_btn(Btn(20, 1, label, state.focused == label))
     Text(text, fg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
       <> text
