@@ -12,8 +12,6 @@ import gleam/string
 pub fn main_old() {
   io.println("Hello from shore!")
 
-  hello_nif()
-  size() |> echo
   //Clear |> c |> io.print
   //set_cbreak() |> echo
   //draw(Input) |> io.println
@@ -30,9 +28,7 @@ pub fn main() {
 
 fn start(spec: Spec(model)) {
   raw_erl()
-  //set_cbreak()
   let assert Ok(elm) = elm_start(spec)
-  //let elm = process.new_subject()
   process.start(fn() { read_input(elm) }, False)
   process.sleep_forever()
 }
@@ -232,7 +228,6 @@ fn do_detect_event(
 }
 
 fn render(state: State(model), node: Node, last_input: String) {
-  let _size = size()
   { c(Clear) <> node |> render_node(state, _, last_input) }
   |> io.print
 }
@@ -265,13 +260,8 @@ fn sep(separator: Separator) -> String {
 // RUNTIME
 //
 
-@external(erlang, "shore_ffi", "size_nif")
-fn size() -> #(Int, Int)
-
-@external(erlang, "shore_ffi", "cbreak_nif")
-fn set_cbreak() -> Nil
-
-type Data
+@external(erlang, "io", "get_line")
+fn get_line(prompt: String) -> Charlist
 
 @external(erlang, "io", "get_chars")
 fn get_chars(prompt: String, count: Int) -> String
@@ -379,18 +369,10 @@ fn draw(node: Node) -> String {
   //  |> string.join("")
 }
 
-@external(erlang, "shore_ffi", "hello_nif")
-fn hello_nif() -> Int
-
-@external(erlang, "shore_ffi", "cmd")
-fn do_cmd(input: Charlist) -> Charlist
-
-@external(erlang, "shore_ffi", "get_pos")
-fn do_get_pos() -> Charlist
-
 fn get_pos() -> #(Int, Int) {
-  do_get_pos()
-  |> echo
+  c(GetPos) |> io.print
+
+  get_line("")
   |> charlist.to_string()
   |> string.drop_start(2)
   |> string.drop_end(1)
@@ -436,6 +418,7 @@ type TermCode {
   Fg(Color)
   Bg(Color)
   Reset
+  GetPos
 }
 
 fn c(code: TermCode) -> String {
@@ -455,6 +438,7 @@ fn c(code: TermCode) -> String {
     Fg(color) -> esc <> "[3" <> col(color) <> "m"
     Bg(color) -> esc <> "[4" <> col(color) <> "m"
     Reset -> esc <> "[0m"
+    GetPos -> esc <> "[6n"
   }
 }
 
@@ -486,37 +470,16 @@ fn col(color: Color) -> String {
 // DELETE THIS PROBABLY?
 //
 
-fn cmd(input: String) -> String {
-  input
-  |> charlist.from_string
-  |> do_cmd
-  |> charlist.to_string
-}
-
 type ShellOpt {
   Noshell
   Raw
-}
-
-type ShellError {
-  AlreadyStarted
 }
 
 fn raw_erl() {
   raw_ffi(#(Noshell, Raw))
 }
 
+type DoNotLeak
+
 @external(erlang, "shell", "start_interactive")
-fn raw_ffi(opts: #(ShellOpt, ShellOpt)) -> Result(Nil, ShellError)
-
-fn raw() -> String {
-  cmd("stty raw -echo")
-}
-
-fn cbreak() -> String {
-  cmd("stty -icanon min 1 -echo")
-}
-
-fn reset() -> String {
-  cmd("stty sane")
-}
+fn raw_ffi(opts: #(ShellOpt, ShellOpt)) -> DoNotLeak

@@ -14,10 +14,7 @@
             packages = with pkgs; [
               gleam
               erlang_28
-              zig
             ];
-            ERL_LIB = "${pkgs.erlang_27}/lib/erlang/lib";
-            LD_LIBRARY_PATH = "${pkgs.erlang_27}/lib/erlang/usr/include";
           };
         }
       );
