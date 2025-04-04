@@ -10,47 +10,16 @@ import gleam/pair
 import gleam/result
 import gleam/string
 
-pub fn main_old() {
-  io.println("Hello from shore!")
+//
+// INIT
+//
 
-  //Clear |> c |> io.print
-  //set_cbreak() |> echo
-  //draw(Input) |> io.println
-  //Pos(15, 10) |> c |> io.print
-  //draw(Input) |> io.println
-  process.sleep_forever()
-}
-
-pub fn main() {
-  //elm_main()
-  //main_old()
-  Nil
-}
-
-pub fn start(spec: Spec(model, msg)) {
-  raw_erl()
-  let assert Ok(elm) = elm_start(spec)
-  process.start(fn() { read_input(elm) }, False)
-  process.sleep_forever()
-}
-
-fn elm_start(spec: Spec(model, msg)) {
-  actor.Spec(
-    init: fn() {
-      let tasks = process.new_subject()
-      let #(model, task_init) = spec.init()
-      let state =
-        State(spec:, model:, tasks:, mode: Normal, last_input: "", focused: "")
-      let _first_paint = model |> spec.view |> render(state, _, "")
-      let queue =
-        process.new_selector() |> process.selecting(tasks, function.identity)
-      task_init |> task_handler(tasks)
-      actor.Ready(state, queue)
-    },
-    init_timeout: 1000,
-    loop: event_loop_actor,
+pub type Spec(model, msg) {
+  Spec(
+    init: fn() -> #(model, List(fn() -> msg)),
+    view: fn(model) -> Node(msg),
+    update: fn(model, msg) -> #(model, List(fn() -> msg)),
   )
-  |> actor.start_spec
 }
 
 type State(model, msg) {
@@ -64,22 +33,40 @@ type State(model, msg) {
   )
 }
 
-pub type Spec(model, msg) {
-  Spec(
-    init: fn() -> #(model, List(fn() -> msg)),
-    view: fn(model) -> Node(msg),
-    update: fn(model, msg) -> #(model, List(fn() -> msg)),
-  )
-}
-
 type Mode {
   Insert
   Normal
   Focus
 }
 
+pub fn start(spec: Spec(model, msg)) {
+  raw_erl()
+  let assert Ok(shore) = shore_start(spec)
+  process.start(fn() { read_input(shore) }, False)
+  process.sleep_forever()
+}
+
+fn shore_start(spec: Spec(model, msg)) {
+  actor.Spec(
+    init: fn() {
+      let tasks = process.new_subject()
+      let #(model, task_init) = spec.init()
+      let state =
+        State(spec:, model:, tasks:, mode: Normal, last_input: "", focused: "")
+      let _first_paint = model |> spec.view |> render(state, _, "")
+      let queue =
+        process.new_selector() |> process.selecting(tasks, function.identity)
+      task_init |> task_handler(tasks)
+      actor.Ready(state, queue)
+    },
+    init_timeout: 1000,
+    loop: shore_loop,
+  )
+  |> actor.start_spec
+}
+
 //
-// EVENT BUS(?)
+// EVENT
 //
 
 type Event(msg) {
@@ -87,7 +74,7 @@ type Event(msg) {
   Cmd(msg)
 }
 
-fn event_loop_actor(event: Event(msg), state: State(model, msg)) {
+fn shore_loop(event: Event(msg), state: State(model, msg)) {
   case event {
     Cmd(msg) -> {
       let #(model, tasks) = state.spec.update(state.model, msg)
@@ -139,6 +126,10 @@ fn task_handler(tasks: List(fn() -> msg), queue: Subject(Event(msg))) -> Nil {
     |> process.start(False)
   })
 }
+
+//
+// CONTROL
+//
 
 type Control {
   FocusClear
@@ -216,6 +207,10 @@ fn do_detect_event(
   }
 }
 
+//
+// RENDER
+//
+
 fn render(state: State(model, msg), node: Node(msg), last_input: String) {
   { c(Clear) <> node |> render_node(state, _, last_input) }
   |> io.print
@@ -259,10 +254,14 @@ fn get_line(prompt: String) -> Charlist
 @external(erlang, "io", "get_chars")
 fn get_chars(prompt: String, count: Int) -> String
 
-fn read_input(elm) {
-  get_chars("", 1) |> KeyPress |> process.send(elm, _)
-  read_input(elm)
+fn read_input(shore: Subject(Event(msg))) -> Nil {
+  get_chars("", 1) |> KeyPress |> process.send(shore, _)
+  read_input(shore)
 }
+
+//
+// DRAW
+//
 
 pub type Node(msg) {
   Input(label: String)
@@ -345,50 +344,7 @@ fn draw(node: Node(msg)) -> String {
   }
   let bottom = fn() { ["╰", string.repeat("─", width), "╯"] |> string.join("") }
   [top(), do_middle(height, []), bottom()] |> string.join("\n")
-  //let box =
-  //  [
-  //    "╭",
-  //    string.repeat("─", width),
-  //    "╮",
-  //    "\n",
-  //    "│",
-  //    string.repeat(fill, width),
-  //    "│",
-  //    "\n",
-  //    "╰",
-  //    string.repeat("─", width),
-  //    "╯",
-  //  ]
-  //  |> string.join("")
 }
-
-fn get_pos() -> #(Int, Int) {
-  c(GetPos) |> io.print
-
-  get_line("")
-  |> charlist.to_string()
-  |> string.drop_start(2)
-  |> string.drop_end(1)
-  |> string.split(";")
-  |> list.map(int.parse)
-  |> fn(i) {
-    case i {
-      [Ok(a), Ok(b)] -> #(a, b)
-      fixme -> {
-        fixme |> echo
-        #(-1, -1)
-      }
-    }
-  }
-}
-
-type TODO
-
-@external(erlang, "io", "rows")
-fn terminal_rows() -> Result(Int, TODO)
-
-@external(erlang, "io", "columns")
-fn terminal_columns() -> Result(Int, TODO)
 
 //
 // TERMINAL CODES
@@ -460,7 +416,7 @@ fn col(color: Color) -> String {
 }
 
 //
-// DELETE THIS PROBABLY?
+// SHELL
 //
 
 type ShellOpt {
@@ -476,3 +432,31 @@ type DoNotLeak
 
 @external(erlang, "shell", "start_interactive")
 fn raw_ffi(opts: #(ShellOpt, ShellOpt)) -> DoNotLeak
+
+fn get_pos() -> #(Int, Int) {
+  c(GetPos) |> io.print
+
+  get_line("")
+  |> charlist.to_string()
+  |> string.drop_start(2)
+  |> string.drop_end(1)
+  |> string.split(";")
+  |> list.map(int.parse)
+  |> fn(i) {
+    case i {
+      [Ok(a), Ok(b)] -> #(a, b)
+      fixme -> {
+        fixme |> echo
+        #(-1, -1)
+      }
+    }
+  }
+}
+
+type TODO
+
+@external(erlang, "io", "rows")
+fn terminal_rows() -> Result(Int, TODO)
+
+@external(erlang, "io", "columns")
+fn terminal_columns() -> Result(Int, TODO)
