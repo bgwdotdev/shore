@@ -39,11 +39,11 @@ type Mode {
   Focus
 }
 
-pub fn start(spec: Spec(model, msg)) {
+pub fn start(spec: Spec(model, msg)) -> Subject(Event(msg)) {
   raw_erl()
   let assert Ok(shore) = shore_start(spec)
   process.start(fn() { read_input(shore) }, False)
-  process.sleep_forever()
+  shore
 }
 
 fn shore_start(spec: Spec(model, msg)) {
@@ -69,8 +69,12 @@ fn shore_start(spec: Spec(model, msg)) {
 // EVENT
 //
 
-type Event(msg) {
+pub opaque type Event(msg) {
   KeyPress(input: String)
+  Cmd(msg)
+}
+
+pub fn cmd(msg: msg) -> Event(msg) {
   Cmd(msg)
 }
 
@@ -80,6 +84,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       let #(model, tasks) = state.spec.update(state.model, msg)
       tasks |> task_handler(state.tasks)
       let state = State(..state, model: model)
+      state.model |> state.spec.view |> render(state, _, "")
       actor.continue(state)
     }
     KeyPress(input) -> {

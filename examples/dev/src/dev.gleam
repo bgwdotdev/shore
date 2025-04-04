@@ -8,7 +8,15 @@ import shore
 // MAIN
 
 pub fn main() {
-  shore.Spec(init:, view:, update:) |> shore.start
+  let ui = shore.Spec(init:, view:, update:) |> shore.start
+  tick(ui)
+  process.sleep_forever()
+}
+
+fn tick(ui: process.Subject(shore.Event(Msg))) {
+  process.send(ui, shore.cmd(Tick))
+  process.sleep(1000)
+  tick(ui)
 }
 
 // MODEL 
@@ -30,6 +38,7 @@ type Msg {
   SendReset
   Reset
   Set(Int)
+  Tick
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
@@ -39,6 +48,7 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
     SendReset -> #(model, [reset])
     Reset -> #(Model(0), [])
     Set(i) -> #(Model(i), [])
+    Tick -> #(Model(counter: model.counter + 1), [])
   }
 }
 
