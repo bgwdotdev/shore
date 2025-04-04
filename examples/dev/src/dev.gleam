@@ -1,12 +1,14 @@
+import gleam/erlang/process
 import gleam/int
 import gleam/io
 import gleam/option.{None, Some}
+import gleam/pair
 import shore
 
 // MAIN
 
 pub fn main() {
-  shore.Spec(model: init(), view:, update:) |> shore.start
+  shore.Spec(init:, view:, update:) |> shore.start
 }
 
 // MODEL 
@@ -15,8 +17,9 @@ type Model {
   Model(counter: Int)
 }
 
-fn init() -> Model {
-  Model(counter: 0)
+fn init() -> #(Model, List(fn() -> Msg)) {
+  let model = Model(counter: 0)
+  #(model, [fn() { Set(10) }])
 }
 
 // UPDATE
@@ -24,12 +27,18 @@ fn init() -> Model {
 type Msg {
   Increment
   Decrement
+  SendReset
+  Reset
+  Set(Int)
 }
 
-fn update(model: Model, msg: Msg) -> Model {
+fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
   case msg {
-    Increment -> Model(model.counter + 1)
-    Decrement -> Model(model.counter - 1)
+    Increment -> Model(model.counter + 1) |> pair.new([])
+    Decrement -> Model(model.counter - 1) |> pair.new([])
+    SendReset -> #(model, [reset])
+    Reset -> #(Model(0), [])
+    Set(i) -> #(Model(i), [])
   }
 }
 
@@ -63,11 +72,18 @@ fn view(model: Model) -> shore.Node(Msg) {
         shore.Row,
       ),
       case model.counter {
-        x if x > 10 && x < 20 -> shore.Button("cc", "c", Increment)
-        x if x > 20 -> shore.Button("dd", "d", Increment)
+        x if x > 10 && x < 20 -> shore.Button("reset", "r", SendReset)
+        x if x > 20 -> shore.Button("dd", "d", Set(0))
         x -> shore.Text("x", Some(shore.Red))
       },
     ],
     shore.Col,
   )
+}
+
+// CMDS
+
+fn reset() -> Msg {
+  process.sleep(10_000)
+  Reset
 }

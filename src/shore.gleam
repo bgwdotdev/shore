@@ -1,5 +1,5 @@
 import gleam/erlang/charlist.{type Charlist}
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject}
 import gleam/function
 import gleam/int
 import gleam/io
@@ -38,12 +38,14 @@ fn elm_start(spec: Spec(model, msg)) {
   actor.Spec(
     init: fn() {
       let tasks = process.new_subject()
+      let #(model, task_init) = spec.init()
       let state =
-        State(spec:, tasks:, mode: Normal, last_input: "", focused: "")
-      let _first_paint = spec.model |> spec.view |> render(state, _, "")
-      let sel =
+        State(spec:, model:, tasks:, mode: Normal, last_input: "", focused: "")
+      let _first_paint = model |> spec.view |> render(state, _, "")
+      let queue =
         process.new_selector() |> process.selecting(tasks, function.identity)
-      actor.Ready(state, sel)
+      task_init |> task_handler(tasks)
+      actor.Ready(state, queue)
     },
     init_timeout: 1000,
     loop: event_loop_actor,
@@ -54,10 +56,19 @@ fn elm_start(spec: Spec(model, msg)) {
 type State(model, msg) {
   State(
     spec: Spec(model, msg),
-    tasks: process.Subject(Event),
+    model: model,
+    tasks: process.Subject(Event(msg)),
     mode: Mode,
     last_input: String,
     focused: String,
+  )
+}
+
+pub type Spec(model, msg) {
+  Spec(
+    init: fn() -> #(model, List(fn() -> msg)),
+    view: fn(model) -> Node(msg),
+    update: fn(model, msg) -> #(model, List(fn() -> msg)),
   )
 }
 
@@ -67,28 +78,25 @@ type Mode {
   Focus
 }
 
-pub type Spec(model, msg) {
-  Spec(
-    model: model,
-    view: fn(model) -> Node(msg),
-    update: fn(model, msg) -> model,
-  )
-}
-
 //
 // EVENT BUS(?)
 //
 
-type Event {
+type Event(msg) {
   KeyPress(input: String)
-  Cmd
+  Cmd(msg)
 }
 
-fn event_loop_actor(event: Event, state: State(model, msg)) {
+fn event_loop_actor(event: Event(msg), state: State(model, msg)) {
   case event {
-    Cmd -> actor.continue(state)
+    Cmd(msg) -> {
+      let #(model, tasks) = state.spec.update(state.model, msg)
+      tasks |> task_handler(state.tasks)
+      let state = State(..state, model: model)
+      actor.continue(state)
+    }
     KeyPress(input) -> {
-      let ui = state.spec.view(state.spec.model)
+      let ui = state.spec.view(state.model)
       let state = case control_event(input) {
         FocusClear -> State(..state, focused: "")
         FocusPrev -> {
@@ -109,16 +117,27 @@ fn event_loop_actor(event: Event, state: State(model, msg)) {
         }
         PassInput(input) -> {
           let model = case detect_event(state, ui, input) {
-            Some(msg) -> state.spec.update(state.spec.model, msg)
-            None -> state.spec.model
+            Some(msg) -> {
+              let #(model, tasks) = state.spec.update(state.model, msg)
+              tasks |> task_handler(state.tasks)
+              model
+            }
+            None -> state.model
           }
-          State(..state, spec: Spec(..state.spec, model: model))
+          State(..state, model:)
         }
       }
-      state.spec.model |> state.spec.view |> render(state, _, input)
+      state.model |> state.spec.view |> render(state, _, input)
       actor.continue(state)
     }
   }
+}
+
+fn task_handler(tasks: List(fn() -> msg), queue: Subject(Event(msg))) -> Nil {
+  list.each(tasks, fn(task) {
+    fn() { task() |> Cmd |> process.send(queue, _) }
+    |> process.start(False)
+  })
 }
 
 type Control {
