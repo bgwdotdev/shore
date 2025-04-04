@@ -72,10 +72,15 @@ fn shore_start(spec: Spec(model, msg)) {
 pub opaque type Event(msg) {
   KeyPress(input: String)
   Cmd(msg)
+  Exit
 }
 
 pub fn cmd(msg: msg) -> Event(msg) {
   Cmd(msg)
+}
+
+pub fn exit() -> Event(msg) {
+  Exit
 }
 
 fn shore_loop(event: Event(msg), state: State(model, msg)) {
@@ -122,6 +127,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       state.model |> state.spec.view |> render(state, _, input)
       actor.continue(state)
     }
+    Exit -> actor.Stop(process.Normal)
   }
 }
 
