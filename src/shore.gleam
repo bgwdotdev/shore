@@ -29,14 +29,13 @@ type State(model, msg) {
     tasks: process.Subject(Event(msg)),
     mode: Mode,
     last_input: String,
-    focused: String,
+    focused: Option(#(String, fn(String) -> msg)),
   )
 }
 
 type Mode {
   Insert
   Normal
-  Focus
 }
 
 pub fn start(spec: Spec(model, msg)) -> Subject(Event(msg)) {
@@ -52,7 +51,14 @@ fn shore_start(spec: Spec(model, msg)) {
       let tasks = process.new_subject()
       let #(model, task_init) = spec.init()
       let state =
-        State(spec:, model:, tasks:, mode: Normal, last_input: "", focused: "")
+        State(
+          spec:,
+          model:,
+          tasks:,
+          mode: Normal,
+          last_input: "",
+          focused: None,
+        )
       let _first_paint = model |> spec.view |> render(state, _, "")
       let queue =
         process.new_selector() |> process.selecting(tasks, function.identity)
@@ -93,39 +99,62 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       actor.continue(state)
     }
     KeyPress(input) -> {
-      let ui = state.spec.view(state.model)
-      let state = case control_event(input) {
-        FocusClear -> State(..state, focused: "")
-        FocusPrev -> {
-          let focusable = list_focusable([ui], [])
-          let focused = case state.focused {
-            "" -> focusable |> list.first |> result.unwrap("")
-            x -> focusable |> focus_next(x, False)
+      case state.mode {
+        Normal -> {
+          let ui = state.spec.view(state.model)
+          let state = case control_event(input) {
+            // TODO: decouple mode from focus clear?
+            FocusClear -> State(..state, focused: None, mode: Normal)
+            FocusPrev -> {
+              let focusable = list_focusable([ui], [])
+              let focused = case state.focused {
+                None -> focusable |> list.first |> option.from_result
+                Some(x) -> focusable |> focus_next(x, False)
+              }
+              State(..state, focused:)
+            }
+            FocusNext -> {
+              let focusable = list_focusable([ui], []) |> list.reverse
+              let focused = case state.focused {
+                None -> focusable |> list.first |> option.from_result
+                Some(x) -> focusable |> focus_next(x, False)
+              }
+              State(..state, focused:)
+            }
+            ModeInsert -> State(..state, mode: Insert)
+            PassInput(input) -> {
+              let model = case detect_event(state, ui, input) {
+                Some(msg) -> {
+                  let #(model, tasks) = state.spec.update(state.model, msg)
+                  tasks |> task_handler(state.tasks)
+                  model
+                }
+                None -> state.model
+              }
+              State(..state, model:)
+            }
           }
-          State(..state, focused:)
+          state.model |> state.spec.view |> render(state, _, input)
+          actor.continue(state)
         }
-        FocusNext -> {
-          let focusable = list_focusable([ui], []) |> list.reverse
-          let focused = case state.focused {
-            "" -> focusable |> list.first |> result.unwrap("")
-            x -> focusable |> focus_next(x, False)
+        Insert -> {
+          let mode = case input {
+            "\u{001b}" -> Normal
+            _ -> Insert
           }
-          State(..state, focused:)
-        }
-        PassInput(input) -> {
-          let model = case detect_event(state, ui, input) {
-            Some(msg) -> {
-              let #(model, tasks) = state.spec.update(state.model, msg)
+          let model = case state.focused {
+            Some(#(_, msg)) -> {
+              let #(model, tasks) = state.spec.update(state.model, msg(input))
               tasks |> task_handler(state.tasks)
               model
             }
-            None -> state.model
+            _ -> state.model
           }
-          State(..state, model:)
+          let state = State(..state, mode:, model:)
+          state.model |> state.spec.view |> render(state, _, input)
+          actor.continue(state)
         }
       }
-      state.model |> state.spec.view |> render(state, _, input)
-      actor.continue(state)
     }
     Exit -> actor.Stop(process.Normal)
   }
@@ -146,6 +175,7 @@ type Control {
   FocusClear
   FocusNext
   FocusPrev
+  ModeInsert
   //Quit
   PassInput(String)
 }
@@ -154,6 +184,7 @@ fn control_event(input: String) -> Control {
   case input {
     "J" -> FocusNext
     "K" -> FocusPrev
+    "I" -> ModeInsert
     //"f" -> todo
     //"Q" -> quit
     "\u{001b}" -> FocusClear
@@ -161,28 +192,31 @@ fn control_event(input: String) -> Control {
   }
 }
 
-fn list_focusable(children: List(Node(msg)), acc: List(String)) -> List(String) {
+fn list_focusable(
+  children: List(Node(msg)),
+  acc: List(#(String, fn(String) -> msg)),
+) -> List(#(String, fn(String) -> msg)) {
   case children {
     [] -> acc
     [x, ..xs] ->
       case x {
-        Div(children, _) -> {
-          //let append = list_focusable(children, [])
-          //list_focusable(xs, list.append(append, acc))
-          list_focusable(xs, list_focusable(children, acc))
-        }
-        Input(label) -> list_focusable(xs, [label, ..acc])
+        Div(children, _) -> list_focusable(xs, list_focusable(children, acc))
+        Input(label, event) -> list_focusable(xs, [#(label, event), ..acc])
         _ -> list_focusable(xs, acc)
       }
   }
 }
 
-fn focus_next(focusable: List(String), focused: String, next: Bool) -> String {
+fn focus_next(
+  focusable: List(#(String, fn(String) -> msg)),
+  focused: #(String, fn(String) -> msg),
+  next: Bool,
+) -> Option(#(String, fn(String) -> msg)) {
   case focusable {
-    [] -> ""
+    [] -> None
     [x, ..xs] ->
       case next {
-        True -> x
+        True -> Some(x)
         False -> focus_next(xs, focused, x == focused)
       }
   }
@@ -194,7 +228,7 @@ fn detect_event(
   input: String,
 ) -> Option(msg) {
   case node {
-    Input(_) -> None
+    Input(_, event) -> None
     HR | BR -> None
     Text(_, _) -> None
     Button(_, key, event) if input == key -> Some(event)
@@ -237,7 +271,13 @@ fn render_node(
       list.map(children, render_node(state, _, last_input))
       |> string.join(sep(separator))
     Button(text, input, _) -> draw_btn(Btn(10, 1, text, last_input == input))
-    Input(label) -> draw_btn(Btn(20, 1, label, state.focused == label))
+    Input(label, event) -> {
+      let is_focused = case state.focused {
+        Some(#(l, _)) -> l == label
+        _ -> False
+      }
+      draw_btn(Btn(20, 1, label, is_focused))
+    }
     Text(text, fg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
       <> text
@@ -275,7 +315,7 @@ fn read_input(shore: Subject(Event(msg))) -> Nil {
 //
 
 pub type Node(msg) {
-  Input(label: String)
+  Input(label: String, event: fn(String) -> msg)
   HR
   BR
   Text(text: String, fg: Option(Color))

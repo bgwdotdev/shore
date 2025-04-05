@@ -22,33 +22,39 @@ fn tick(ui: process.Subject(shore.Event(Msg))) {
 // MODEL 
 
 type Model {
-  Model(counter: Int)
+  Model(counter: Int, hi: String)
 }
 
 fn init() -> #(Model, List(fn() -> Msg)) {
-  let model = Model(counter: 0)
+  let model = Model(counter: 0, hi: "")
   #(model, [fn() { Set(10) }])
 }
 
 // UPDATE
 
 type Msg {
+  NoOp
+  FixMe(String)
   Increment
   Decrement
   SendReset
   Reset
   Set(Int)
   Tick
+  SetHi(String)
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
   case msg {
-    Increment -> Model(model.counter + 1) |> pair.new([])
-    Decrement -> Model(model.counter - 1) |> pair.new([])
+    NoOp -> #(model, [])
+    FixMe(_) -> #(model, [])
+    Increment -> Model(..model, counter: model.counter + 1) |> pair.new([])
+    Decrement -> Model(..model, counter: model.counter - 1) |> pair.new([])
     SendReset -> #(model, [reset])
-    Reset -> #(Model(0), [])
-    Set(i) -> #(Model(i), [])
-    Tick -> #(Model(counter: model.counter + 1), [])
+    Reset -> #(Model(..model, counter: 0), [])
+    Set(i) -> #(Model(..model, counter: i), [])
+    Tick -> #(Model(..model, counter: model.counter + 1), [])
+    SetHi(text) -> #(Model(..model, hi: model.hi <> text), [])
   }
 }
 
@@ -59,13 +65,16 @@ fn view(model: Model) -> shore.Node(Msg) {
     [
       "HELLO WORLD" |> shore.Text(None),
       shore.HR,
-      shore.Input("hi"),
+      shore.Input("hi", SetHi),
       shore.BR,
       shore.BR,
-      shore.Input("bye"),
+      model.hi |> shore.Text(None),
       shore.BR,
       shore.BR,
-      shore.Input("try"),
+      shore.Input("bye", FixMe),
+      shore.BR,
+      shore.BR,
+      shore.Input("try", FixMe),
       shore.BR,
       shore.BR,
       model.counter |> int.to_string |> shore.Text(Some(shore.Black)),
