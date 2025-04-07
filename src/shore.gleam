@@ -10,6 +10,7 @@ import gleam/otp/actor
 import gleam/pair
 import gleam/result
 import gleam/string
+import shore/key.{type Key}
 
 //
 // INIT
@@ -64,7 +65,7 @@ fn shore_start(spec: Spec(model, msg)) {
           last_input: "",
           focused: None,
         )
-      let _first_paint = model |> spec.view |> render(state, _, "")
+      let _first_paint = model |> spec.view |> render(state, _, key.Char(""))
       let queue =
         process.new_selector() |> process.selecting(tasks, function.identity)
       task_init |> task_handler(tasks)
@@ -81,7 +82,7 @@ fn shore_start(spec: Spec(model, msg)) {
 //
 
 pub opaque type Event(msg) {
-  KeyPress(input: String)
+  KeyPress(Key)
   Cmd(msg)
   Exit
 }
@@ -100,10 +101,11 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       let #(model, tasks) = state.spec.update(state.model, msg)
       tasks |> task_handler(state.tasks)
       let state = State(..state, model: model)
-      state.model |> state.spec.view |> render(state, _, "")
+      state.model |> state.spec.view |> render(state, _, key.Char(""))
       actor.continue(state)
     }
     KeyPress(input) -> {
+      input |> echo
       case state.mode {
         Normal -> {
           let ui = state.spec.view(state.model)
@@ -144,7 +146,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
         }
         Insert -> {
           let mode = case input {
-            "\u{001b}" -> Normal
+            key.Esc -> Normal
             _ -> Insert
           }
           let #(focused, model) = case state.focused {
@@ -167,22 +169,16 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
   }
 }
 
-fn input_handler(value: String, input: String) -> String {
+fn input_handler(value: String, input: Key) -> String {
   case input {
-    // BACKSPACe
-    //"\u{007F}" -> string.drop_end(value, 1)
-    "\u{007F}" -> value |> string.drop_end(1)
-    // UP
-    "\u{001B}[A" -> string.drop_end(value, 1)
-    // DOWN
-    "\u{001B}[B" -> string.drop_end(value, 1)
-    // RIGHT
-    "\u{001B}[C" -> string.drop_end(value, 1)
-    // LEFT
-    "\u{001B}[D" -> string.drop_end(value, 1)
-    // DELETE
-    "\u{001B}[3~" -> value <> input
-    _ -> value <> input
+    key.Backspace -> value |> string.drop_end(1)
+    key.Up -> string.drop_end(value, 1)
+    key.Down -> string.drop_end(value, 1)
+    key.Right -> string.drop_end(value, 1)
+    key.Left -> string.drop_end(value, 1)
+    key.Delete -> value
+    key.Char(char) -> value <> char
+    _ -> value
   }
 }
 
@@ -203,17 +199,17 @@ type Control {
   FocusPrev
   ModeInsert
   //Quit
-  PassInput(String)
+  PassInput(Key)
 }
 
-fn control_event(input: String) -> Control {
+fn control_event(input: Key) -> Control {
   case input {
-    "J" -> FocusNext
-    "K" -> FocusPrev
-    "I" -> ModeInsert
+    key.Char("J") -> FocusNext
+    key.Char("K") -> FocusPrev
+    key.Char("I") -> ModeInsert
     //"f" -> todo
     //"Q" -> quit
-    "\u{001b}" -> FocusClear
+    key.Esc -> FocusClear
     x -> PassInput(x)
   }
 }
@@ -255,13 +251,13 @@ fn focus_next(
 fn detect_event(
   state: State(model, msg),
   node: Node(msg),
-  input: String,
+  input: Key,
 ) -> Option(msg) {
   case node {
     Input(_, _, event) -> None
     HR | BR -> None
     Text(_, _) -> None
-    Button(_, key, event) if input == key -> Some(event)
+    Button(_, key, event) if input == key.Char(key) -> Some(event)
     Button(_, _, _) -> None
     Div(children, _) -> do_detect_event(state, children, input)
   }
@@ -270,7 +266,7 @@ fn detect_event(
 fn do_detect_event(
   state: State(model, msg),
   children: List(Node(msg)),
-  input: String,
+  input: Key,
 ) -> Option(msg) {
   case children {
     [] -> None
@@ -286,7 +282,7 @@ fn do_detect_event(
 // RENDER
 //
 
-fn render(state: State(model, msg), node: Node(msg), last_input: String) {
+fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
   { c(Clear) <> node |> render_node(state, _, last_input) }
   |> io.print
 }
@@ -294,14 +290,14 @@ fn render(state: State(model, msg), node: Node(msg), last_input: String) {
 fn render_node(
   state: State(model, msg),
   node: Node(msg),
-  last_input: String,
+  last_input: Key,
 ) -> String {
   case node {
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input))
       |> string.join(sep(separator))
     Button(text, input, _) ->
-      draw_btn(Btn(10, 1, "", text, last_input == input))
+      draw_btn(Btn(10, 1, "", text, last_input == key.Char(input)))
     Input(label, value, _event) -> {
       let is_focused = case state.focused {
         Some(focused) -> focused.label == label
