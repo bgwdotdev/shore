@@ -303,7 +303,11 @@ fn render_node(
         Some(focused) -> focused.label == label
         _ -> False
       }
-      draw_input(Btn(20, 1, label, value, is_focused))
+      let is_insert = case state.mode {
+        Insert -> True
+        _ -> False
+      }
+      draw_input(Iput(20, 1, label, value, is_focused, is_insert))
     }
     Text(text, fg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
@@ -375,7 +379,18 @@ type Btn {
   Btn(width: Int, height: Int, title: String, text: String, pressed: Bool)
 }
 
-fn draw_input(btn: Btn) -> String {
+type Iput {
+  Iput(
+    width: Int,
+    height: Int,
+    title: String,
+    text: String,
+    pressed: Bool,
+    insert: Bool,
+  )
+}
+
+fn draw_input(btn: Iput) -> String {
   let padding = btn.width - string.length(btn.text) |> int.to_float
   let odd = case float.modulo(padding, 2.0) {
     Ok(0.0) -> 0
@@ -413,9 +428,10 @@ fn draw_input(btn: Btn) -> String {
   let width = btn.width + 2
   let start = c(Left(width)) <> c(Down(1))
   let top_right = c(Up(1 + btn.height))
-  let colour = case btn.pressed {
-    True -> Blue |> Fg |> c
-    False -> White |> Fg |> c
+  let colour = case btn.pressed, btn.insert {
+    True, True -> Green |> Fg |> c
+    True, False -> Blue |> Fg |> c
+    _, _ -> White |> Fg |> c
   }
   [
     colour,
