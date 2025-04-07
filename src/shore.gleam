@@ -327,7 +327,7 @@ fn sep(separator: Separator) -> String {
 }
 
 //
-// RUNTIME
+// READ INPUT
 //
 
 @external(erlang, "io", "get_line")
@@ -337,7 +337,10 @@ fn get_line(prompt: String) -> Charlist
 fn get_chars(prompt: String, count: Int) -> String
 
 fn read_input(shore: Subject(Event(msg))) -> Nil {
-  get_chars("", 1) |> KeyPress |> process.send(shore, _)
+  // TODO: this seems to solve issues with key seuqences but:
+  // a) is 10 long enough for expected key codes
+  // b) is it possible to have character merges if you press two keys quickly enough?
+  get_chars("", 10) |> key.from_string |> KeyPress |> process.send(shore, _)
   read_input(shore)
 }
 
