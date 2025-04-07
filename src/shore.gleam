@@ -1,5 +1,6 @@
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process.{type Subject}
+import gleam/float
 import gleam/function
 import gleam/int
 import gleam/io
@@ -29,8 +30,12 @@ type State(model, msg) {
     tasks: process.Subject(Event(msg)),
     mode: Mode,
     last_input: String,
-    focused: Option(#(String, fn(String) -> msg)),
+    focused: Option(Focused(msg)),
   )
+}
+
+type Focused(msg) {
+  Focused(label: String, value: String, event: fn(String) -> msg, cursor: Int)
 }
 
 type Mode {
@@ -142,21 +147,42 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
             "\u{001b}" -> Normal
             _ -> Insert
           }
-          let model = case state.focused {
-            Some(#(_, msg)) -> {
-              let #(model, tasks) = state.spec.update(state.model, msg(input))
+          let #(focused, model) = case state.focused {
+            Some(focused) -> {
+              let new_value = input_handler(focused.value, input)
+              let #(model, tasks) =
+                state.spec.update(state.model, focused.event(new_value))
               tasks |> task_handler(state.tasks)
-              model
+              #(Some(Focused(..focused, value: new_value)), model)
             }
-            _ -> state.model
+            x -> #(x, state.model)
           }
-          let state = State(..state, mode:, model:)
+          let state = State(..state, focused:, mode:, model:)
           state.model |> state.spec.view |> render(state, _, input)
           actor.continue(state)
         }
       }
     }
     Exit -> actor.Stop(process.Normal)
+  }
+}
+
+fn input_handler(value: String, input: String) -> String {
+  case input {
+    // BACKSPACe
+    //"\u{007F}" -> string.drop_end(value, 1)
+    "\u{007F}" -> value |> string.drop_end(1)
+    // UP
+    "\u{001B}[A" -> string.drop_end(value, 1)
+    // DOWN
+    "\u{001B}[B" -> string.drop_end(value, 1)
+    // RIGHT
+    "\u{001B}[C" -> string.drop_end(value, 1)
+    // LEFT
+    "\u{001B}[D" -> string.drop_end(value, 1)
+    // DELETE
+    "\u{001B}[3~" -> value <> input
+    _ -> value <> input
   }
 }
 
@@ -194,24 +220,28 @@ fn control_event(input: String) -> Control {
 
 fn list_focusable(
   children: List(Node(msg)),
-  acc: List(#(String, fn(String) -> msg)),
-) -> List(#(String, fn(String) -> msg)) {
+  acc: List(Focused(msg)),
+) -> List(Focused(msg)) {
   case children {
     [] -> acc
     [x, ..xs] ->
       case x {
         Div(children, _) -> list_focusable(xs, list_focusable(children, acc))
-        Input(label, event) -> list_focusable(xs, [#(label, event), ..acc])
+        Input(label, value, event) ->
+          list_focusable(xs, [
+            Focused(label:, value:, event:, cursor: string.length(value)),
+            ..acc
+          ])
         _ -> list_focusable(xs, acc)
       }
   }
 }
 
 fn focus_next(
-  focusable: List(#(String, fn(String) -> msg)),
-  focused: #(String, fn(String) -> msg),
+  focusable: List(Focused(msg)),
+  focused: Focused(msg),
   next: Bool,
-) -> Option(#(String, fn(String) -> msg)) {
+) -> Option(Focused(msg)) {
   case focusable {
     [] -> None
     [x, ..xs] ->
@@ -228,7 +258,7 @@ fn detect_event(
   input: String,
 ) -> Option(msg) {
   case node {
-    Input(_, event) -> None
+    Input(_, _, event) -> None
     HR | BR -> None
     Text(_, _) -> None
     Button(_, key, event) if input == key -> Some(event)
@@ -270,13 +300,14 @@ fn render_node(
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input))
       |> string.join(sep(separator))
-    Button(text, input, _) -> draw_btn(Btn(10, 1, text, last_input == input))
-    Input(label, event) -> {
+    Button(text, input, _) ->
+      draw_btn(Btn(10, 1, "", text, last_input == input))
+    Input(label, value, _event) -> {
       let is_focused = case state.focused {
-        Some(#(l, _)) -> l == label
+        Some(focused) -> focused.label == label
         _ -> False
       }
-      draw_btn(Btn(20, 1, label, is_focused))
+      draw_input(Btn(20, 1, label, value, is_focused))
     }
     Text(text, fg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
@@ -315,7 +346,7 @@ fn read_input(shore: Subject(Event(msg))) -> Nil {
 //
 
 pub type Node(msg) {
-  Input(label: String, event: fn(String) -> msg)
+  Input(label: String, value: String, event: fn(String) -> msg)
   HR
   BR
   Text(text: String, fg: Option(Color))
@@ -342,22 +373,97 @@ fn middle() -> String {
 }
 
 type Btn {
-  Btn(width: Int, height: Int, text: String, pressed: Bool)
+  Btn(width: Int, height: Int, title: String, text: String, pressed: Bool)
+}
+
+fn draw_input(btn: Btn) -> String {
+  let padding = btn.width - string.length(btn.text) |> int.to_float
+  let odd = case float.modulo(padding, 2.0) {
+    Ok(0.0) -> 0
+    Ok(1.0) -> 0
+    Ok(_) -> 1
+    _ -> 0
+  }
+  let padr = float.truncate(padding) + 0 - 2
+  let text_trim =
+    string.length(btn.text) + 2 - btn.width
+    |> int.max(0)
+    |> string.drop_start(btn.text, _)
+  let top = case string.length(btn.title) {
+    0 -> fn() { ["╭", string.repeat("─", btn.width), "╮"] |> string.join("") }
+    _ -> fn() {
+      [
+        "╭",
+        "─",
+        " ",
+        btn.title,
+        " ",
+        string.repeat("─", btn.width - 3 - string.length(btn.title)),
+        "╮",
+      ]
+      |> string.join("")
+    }
+  }
+  let middle = fn() {
+    ["│", " ", text_trim, string.repeat(" ", padr), " ", "│"]
+    |> string.join("")
+  }
+  let bottom = fn() {
+    ["╰", string.repeat("─", btn.width), "╯"] |> string.join("")
+  }
+  let width = btn.width + 2
+  let start = c(Left(width)) <> c(Down(1))
+  let top_right = c(Up(1 + btn.height))
+  let colour = case btn.pressed {
+    True -> Blue |> Fg |> c
+    False -> White |> Fg |> c
+  }
+  [
+    colour,
+    top(),
+    start,
+    middle(),
+    start,
+    bottom(),
+    top_right,
+    " ",
+    float.to_string(padding),
+    " ",
+    int.to_string(odd),
+    " ",
+    float.modulo(padding, 2.0) |> string.inspect,
+    Reset |> c,
+  ]
+  |> string.join("")
 }
 
 fn draw_btn(btn: Btn) -> String {
-  let padding = { btn.width - string.length(btn.text) } / 2
-  let top = fn() {
-    ["╭", string.repeat("─", btn.width), "╮"] |> string.join("")
+  let padding = { btn.width - string.length(btn.text) |> int.to_float } /. 2.0
+  let odd = case float.modulo(padding, 2.0) {
+    Ok(0.0) -> 0
+    Ok(1.0) -> 0
+    Ok(_) -> 1
+    _ -> 0
+  }
+  let padl = float.truncate(padding)
+  let padr = float.truncate(padding) + odd
+  let top = case string.length(btn.title) {
+    0 -> fn() { ["╭", string.repeat("─", btn.width), "╮"] |> string.join("") }
+    _ -> fn() {
+      [
+        "╭",
+        "─",
+        " ",
+        btn.title,
+        " ",
+        string.repeat("─", btn.width - 3 - string.length(btn.title)),
+        "╮",
+      ]
+      |> string.join("")
+    }
   }
   let middle = fn() {
-    [
-      "│",
-      string.repeat(" ", padding),
-      btn.text,
-      string.repeat(" ", padding),
-      "│",
-    ]
+    ["│", string.repeat(" ", padl), btn.text, string.repeat(" ", padr), "│"]
     |> string.join("")
   }
   let bottom = fn() {

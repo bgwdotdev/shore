@@ -54,7 +54,7 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
     Reset -> #(Model(..model, counter: 0), [])
     Set(i) -> #(Model(..model, counter: i), [])
     Tick -> #(Model(..model, counter: model.counter + 1), [])
-    SetHi(text) -> #(Model(..model, hi: model.hi <> text), [])
+    SetHi(text) -> #(Model(..model, hi: text), [])
   }
 }
 
@@ -65,16 +65,16 @@ fn view(model: Model) -> shore.Node(Msg) {
     [
       "HELLO WORLD" |> shore.Text(None),
       shore.HR,
-      shore.Input("hi", SetHi),
+      shore.Input("hi", model.hi, SetHi),
       shore.BR,
       shore.BR,
       model.hi |> shore.Text(None),
       shore.BR,
       shore.BR,
-      shore.Input("bye", FixMe),
+      shore.Input("bye", "", FixMe),
       shore.BR,
       shore.BR,
-      shore.Input("try", FixMe),
+      shore.Input("try", "", FixMe),
       shore.BR,
       shore.BR,
       model.counter |> int.to_string |> shore.Text(Some(shore.Black)),
@@ -87,7 +87,7 @@ fn view(model: Model) -> shore.Node(Msg) {
       model.counter |> int.to_string |> shore.Text(Some(shore.White)),
       shore.BR,
       shore.Div(
-        [shore.Button("++", "a", Increment), shore.Button("--", "b", Decrement)],
+        [shore.Button("++", "a", Increment), shore.Button("-", "b", Decrement)],
         shore.Row,
       ),
       case model.counter {
