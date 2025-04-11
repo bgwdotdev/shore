@@ -36,7 +36,14 @@ type State(model, msg) {
 }
 
 type Focused(msg) {
-  Focused(label: String, value: String, event: fn(String) -> msg, cursor: Int)
+  Focused(
+    label: String,
+    value: String,
+    event: fn(String) -> msg,
+    cursor: Int,
+    offset: Int,
+    width: Int,
+  )
 }
 
 type Mode {
@@ -178,34 +185,60 @@ fn task_handler(tasks: List(fn() -> msg), queue: Subject(Event(msg))) -> Nil {
 
 fn input_handler(focused: Focused(msg), input: Key) -> Focused(msg) {
   case input {
-    key.Backspace ->
+    key.Backspace -> {
+      let cursor = int.max(0, focused.cursor - 1)
+      let offset = int.max(0, focused.offset - 1)
       Focused(
         ..focused,
         value: focused.value |> string_backspace(focused.cursor, -1),
-        cursor: focused.cursor - 1,
+        cursor:,
+        offset:,
       )
+    }
     //key.Up -> string.drop_end(value, 1)
     //key.Down -> string.drop_end(value, 1)
     key.Home -> Focused(..focused, cursor: 0)
     key.End -> Focused(..focused, cursor: string.length(focused.value))
-    key.Right ->
-      Focused(
-        ..focused,
-        cursor: int.min(string.length(focused.value), focused.cursor + 1),
-      )
-    key.Left -> Focused(..focused, cursor: int.max(0, focused.cursor - 1))
-    key.Delete ->
+    key.Right -> {
+      let cursor = int.min(string.length(focused.value), focused.cursor + 1)
+      let offset = input_offset(cursor, focused.offset, focused.width)
+      Focused(..focused, cursor:, offset:)
+    }
+    key.Left -> {
+      let cursor = int.max(0, focused.cursor - 1)
+      let offset = input_offset(cursor, focused.offset, focused.width)
+      Focused(..focused, cursor:, offset:)
+    }
+    key.Delete -> {
+      let offset = case focused.cursor == string.length(focused.value) {
+        True -> focused.offset
+        False -> int.max(0, focused.offset - 1)
+      }
       Focused(
         ..focused,
         value: focused.value |> string_backspace(focused.cursor, 0),
+        offset:,
       )
-    key.Char(char) ->
+    }
+    key.Char(char) -> {
+      let cursor = focused.cursor + 1
+      let offset = input_offset(cursor, focused.offset, focused.width)
       Focused(
         ..focused,
         value: string_insert(focused.value, focused.cursor, char),
-        cursor: focused.cursor + 1,
+        cursor:,
+        offset:,
       )
+    }
     _ -> focused
+  }
+}
+
+fn input_offset(cursor cursor: Int, offset offset: Int, width width: Int) -> Int {
+  case cursor {
+    x if x < offset -> cursor
+    x if x >= offset + { width - 3 } -> cursor - width + 3
+    _ -> offset
   }
 }
 
@@ -273,11 +306,22 @@ fn list_focusable(
     [x, ..xs] ->
       case x {
         Div(children, _) -> list_focusable(xs, list_focusable(children, acc))
-        Input(label, value, event) ->
-          list_focusable(xs, [
-            Focused(label:, value:, event:, cursor: string.length(value)),
-            ..acc
-          ])
+        Input(label, value, event) -> {
+          let cursor = string.length(value)
+          let focused =
+            Focused(
+              label:,
+              value:,
+              event:,
+              //cursor: 0,
+              offset: 0,
+              cursor:,
+              //offset: string.length(value),
+              width: 20,
+            )
+          let offset = input_offset(cursor, focused.offset, focused.width)
+          list_focusable(xs, [Focused(..focused, offset:), ..acc])
+        }
         _ -> list_focusable(xs, acc)
       }
   }
@@ -350,14 +394,27 @@ fn render_node(
       draw_btn(Btn(10, 1, "", text, last_input == key.Char(input)))
     Input(label, value, _event) -> {
       let #(is_focused, cursor) = case state.focused {
-        Some(focused) -> #(focused.label == label, focused.cursor)
-        _ -> #(False, 0)
+        Some(focused) if focused.label == label -> #(True, focused.cursor)
+        _ -> #(False, string.length(value))
       }
       let is_insert = case state.mode {
         Insert -> True
         _ -> False
       }
-      draw_input(Iput(20, 1, label, value, is_focused, is_insert, cursor))
+      let offset = case state.focused {
+        Some(focused) if focused.label == label -> focused.offset
+        _ -> input_offset(string.length(value), 0, 20)
+      }
+      draw_input(Iput(
+        20,
+        1,
+        label,
+        value,
+        is_focused,
+        is_insert,
+        cursor,
+        offset,
+      ))
     }
     Text(text, fg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
@@ -438,24 +495,30 @@ type Iput {
     pressed: Bool,
     insert: Bool,
     cursor: Int,
+    offset: Int,
   )
 }
 
 fn draw_input(btn: Iput) -> String {
-  let padding = btn.width - string.length(btn.text) |> int.to_float
-  let odd = case float.modulo(padding, 2.0) {
-    Ok(0.0) -> 0
-    Ok(1.0) -> 0
-    Ok(_) -> 1
-    _ -> 0
+  // 2 == padding of space either side
+  let colour = case btn.pressed, btn.insert {
+    True, True -> Green |> Fg |> c
+    True, False -> Blue |> Fg |> c
+    _, _ -> White |> Fg |> c
   }
-  let padr = float.truncate(padding) + 0 - 2
+  let in_width = btn.width - 2
+  let text = btn.text <> " "
+  let padding = in_width - string.length(text)
   let text_trim =
-    btn.cursor - btn.width + 2
-    |> int.max(0)
-    |> string.slice(btn.text, _, btn.width - 2)
-    |> string.append(" ")
-    |> map_cursor(btn.cursor, btn.width)
+    text
+    |> string.slice(btn.offset, in_width)
+    //|> map_cursor(btn.cursor - btn.offset, btn.width)
+    |> fn(x) {
+      case btn.pressed {
+        True -> map_cursor(x, btn.cursor - btn.offset, btn.width)
+        False -> x
+      }
+    }
   let top = case string.length(btn.title) {
     0 -> fn() { ["╭", string.repeat("─", btn.width), "╮"] |> string.join("") }
     _ -> fn() {
@@ -472,7 +535,16 @@ fn draw_input(btn: Iput) -> String {
     }
   }
   let middle = fn() {
-    ["│", " ", text_trim, string.repeat(" ", padr), "│"]
+    [
+      "│",
+      " ",
+      c(Reset),
+      text_trim,
+      string.repeat(" ", padding),
+      colour,
+      " ",
+      "│",
+    ]
     |> string.join("")
   }
   let bottom = fn() {
@@ -481,25 +553,25 @@ fn draw_input(btn: Iput) -> String {
   let width = btn.width + 2
   let start = c(Left(width)) <> c(Down(1))
   let top_right = c(Up(1 + btn.height))
-  let colour = case btn.pressed, btn.insert {
-    True, True -> Green |> Fg |> c
-    True, False -> Blue |> Fg |> c
-    _, _ -> White |> Fg |> c
-  }
   [
     colour,
     top(),
     start,
-    c(Reset),
     middle(),
-    colour,
     start,
     bottom(),
     top_right,
-    " ",
-    int.to_string(btn.cursor),
-    " ",
-    btn.text |> string.length |> int.to_string,
+    // // DEBUG
+    //" ",
+    //int.to_string(btn.cursor),
+    //" ",
+    //btn.offset |> int.to_string,
+    //" ",
+    //btn.text |> string.length |> int.to_string,
+    //" ",
+    //padding |> int.to_string,
+    //" ",
+    //text_trim |> string.length |> int.to_string,
     Reset |> c,
   ]
   |> string.join("")

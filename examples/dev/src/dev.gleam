@@ -22,11 +22,12 @@ fn tick(ui: process.Subject(shore.Event(Msg))) {
 // MODEL 
 
 type Model {
-  Model(counter: Int, hi: String)
+  Model(counter: Int, hi: String, bye: String)
 }
 
 fn init() -> #(Model, List(fn() -> Msg)) {
-  let model = Model(counter: 0, hi: "")
+  let model =
+    Model(counter: 0, hi: "abcdefghijklmnopqrstuvwxyz", bye: "abcdarsd")
   #(model, [fn() { Set(10) }])
 }
 
@@ -42,6 +43,7 @@ type Msg {
   Set(Int)
   Tick
   SetHi(String)
+  SetBye(String)
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
@@ -55,6 +57,7 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
     Set(i) -> #(Model(..model, counter: i), [])
     Tick -> #(Model(..model, counter: model.counter + 1), [])
     SetHi(text) -> #(Model(..model, hi: text), [])
+    SetBye(text) -> #(Model(..model, bye: text), [])
   }
 }
 
@@ -71,8 +74,9 @@ fn view(model: Model) -> shore.Node(Msg) {
       model.hi |> shore.Text(None),
       shore.BR,
       shore.BR,
-      shore.Input("bye", "", FixMe),
+      shore.Input("bye", model.bye, SetBye),
       shore.BR,
+      model.bye |> shore.Text(None),
       shore.BR,
       shore.Input("try", "", FixMe),
       shore.BR,
