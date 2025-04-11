@@ -306,7 +306,7 @@ fn list_focusable(
     [x, ..xs] ->
       case x {
         Div(children, _) -> list_focusable(xs, list_focusable(children, acc))
-        Input(label, value, event) -> {
+        Input(width, label, value, event) -> {
           let cursor = string.length(value)
           let focused =
             Focused(
@@ -317,7 +317,7 @@ fn list_focusable(
               offset: 0,
               cursor:,
               //offset: string.length(value),
-              width: 20,
+              width:,
             )
           let offset = input_offset(cursor, focused.offset, focused.width)
           list_focusable(xs, [Focused(..focused, offset:), ..acc])
@@ -348,7 +348,7 @@ fn detect_event(
   input: Key,
 ) -> Option(msg) {
   case node {
-    Input(_, _, event) -> None
+    Input(_, _, _, event) -> None
     HR | BR -> None
     Text(_, _) -> None
     Button(_, key, event) if input == key.Char(key) -> Some(event)
@@ -392,7 +392,7 @@ fn render_node(
       |> string.join(sep(separator))
     Button(text, input, _) ->
       draw_btn(Btn(10, 1, "", text, last_input == key.Char(input)))
-    Input(label, value, _event) -> {
+    Input(width, label, value, _event) -> {
       let #(is_focused, cursor) = case state.focused {
         Some(focused) if focused.label == label -> #(True, focused.cursor)
         _ -> #(False, string.length(value))
@@ -403,10 +403,10 @@ fn render_node(
       }
       let offset = case state.focused {
         Some(focused) if focused.label == label -> focused.offset
-        _ -> input_offset(string.length(value), 0, 20)
+        _ -> input_offset(string.length(value), 0, width)
       }
       draw_input(Iput(
-        20,
+        width,
         1,
         label,
         value,
@@ -456,7 +456,7 @@ fn read_input(shore: Subject(Event(msg))) -> Nil {
 //
 
 pub type Node(msg) {
-  Input(label: String, value: String, event: fn(String) -> msg)
+  Input(width: Int, label: String, value: String, event: fn(String) -> msg)
   HR
   BR
   Text(text: String, fg: Option(Color))
