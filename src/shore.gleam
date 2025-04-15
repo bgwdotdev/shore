@@ -53,6 +53,8 @@ type Mode {
 
 pub fn start(spec: Spec(model, msg)) -> Subject(Event(msg)) {
   raw_erl()
+  // TODO: set this and fix exit
+  // { c(HideCursor) <> c(AltBuffer) } |> io.print
   let assert Ok(shore) = shore_start(spec)
   process.start(fn() { read_input(shore) }, False)
   shore
@@ -112,7 +114,6 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       actor.continue(state)
     }
     KeyPress(input) -> {
-      input |> echo
       case state.mode {
         Normal -> {
           let ui = state.spec.view(state.model)
@@ -172,7 +173,10 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
         }
       }
     }
-    Exit -> actor.Stop(process.Normal)
+    Exit -> {
+      { c(ShowCursor) <> c(MainBuffer) } |> io.print
+      actor.Stop(process.Normal)
+    }
   }
 }
 
@@ -305,7 +309,8 @@ fn list_focusable(
     [] -> acc
     [x, ..xs] ->
       case x {
-        Div(children, _) -> list_focusable(xs, list_focusable(children, acc))
+        Div(children, _) | Box(children, _, _, _) ->
+          list_focusable(xs, list_focusable(children, acc))
         Input(width, label, value, event) -> {
           let cursor = string.length(value)
           let focused =
@@ -350,10 +355,13 @@ fn detect_event(
   case node {
     Input(_, _, _, event) -> None
     HR | BR -> None
-    Text(_, _) -> None
+    Text(..) | TextMulti(..) -> None
     Button(_, key, event) if input == key.Char(key) -> Some(event)
-    Button(_, _, _) -> None
-    Div(children, _) -> do_detect_event(state, children, input)
+    Button(..) -> None
+    KeyBind(key, event) if input == key.Char(key) -> Some(event)
+    KeyBind(..) -> None
+    Div(children, _) | Box(children, _, _, _) ->
+      do_detect_event(state, children, input)
   }
 }
 
@@ -390,8 +398,16 @@ fn render_node(
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input))
       |> string.join(sep(separator))
+    Box(children, width, height, title) -> {
+      [
+        draw_box(width, height, title),
+        ..list.map(children, render_node(state, _, last_input))
+      ]
+      |> string.join(sep(Col))
+    }
     Button(text, input, _) ->
       draw_btn(Btn(10, 1, "", text, last_input == key.Char(input)))
+    KeyBind(..) -> ""
     Input(width, label, value, _event) -> {
       let #(is_focused, cursor) = case state.focused {
         Some(focused) if focused.label == label -> #(True, focused.cursor)
@@ -416,14 +432,28 @@ fn render_node(
         offset,
       ))
     }
-    Text(text, fg) ->
+    Text(text, fg, bg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+      <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
       <> text
       <> c(Reset)
+
+    TextMulti(text, fg, bg) ->
+      { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+      <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
+      <> text |> text_to_multi
+      <> c(Reset)
+
     HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
     BR -> "\n"
-    _ -> ""
   }
+}
+
+fn text_to_multi(text: String) -> String {
+  c(SavePos)
+  <> { text |> string.replace("\n", c(LoadPos) <> c(Down(1)) <> c(SavePos)) }
+  <> c(LoadPos)
+  <> c(Down(1))
 }
 
 fn sep(separator: Separator) -> String {
@@ -447,7 +477,10 @@ fn read_input(shore: Subject(Event(msg))) -> Nil {
   // TODO: this seems to solve issues with key seuqences but:
   // a) is 10 long enough for expected key codes
   // b) is it possible to have character merges if you press two keys quickly enough?
-  get_chars("", 10) |> key.from_string |> KeyPress |> process.send(shore, _)
+  get_chars("", 10)
+  |> key.from_string
+  |> KeyPress
+  |> process.send(shore, _)
   read_input(shore)
 }
 
@@ -456,12 +489,24 @@ fn read_input(shore: Subject(Event(msg))) -> Nil {
 //
 
 pub type Node(msg) {
+  /// A field for text input
   Input(width: Int, label: String, value: String, event: fn(String) -> msg)
+  /// A horizontal line
   HR
+  /// An empty line
   BR
-  Text(text: String, fg: Option(Color))
+  /// A text string
+  Text(text: String, fg: Option(Color), bg: Option(Color))
+  /// A multi-line text string
+  TextMulti(text: String, fg: Option(Color), bg: Option(Color))
+  /// A button assigned to a key press to execute an event
   Button(text: String, key: String, event: msg)
+  /// A non-visible button assigned to a key press to execute an event
+  KeyBind(key: String, event: msg)
+  /// A container element for holding other nodes
   Div(children: List(Node(msg)), separator: Separator)
+  /// A box container element for holding other nodes
+  Box(children: List(Node(msg)), width: Int, height: Int, title: Option(String))
 }
 
 pub type Separator {
@@ -469,16 +514,15 @@ pub type Separator {
   Col
 }
 
-fn do_middle(height: Int, acc: List(String)) -> String {
+fn do_middle(width: Int, height: Int, acc: List(String)) -> String {
   case height {
-    0 -> acc |> string.join("\n")
-    h -> do_middle(h - 1, [middle(), ..acc])
+    0 -> acc |> string.join(c(Left(width + 2)) <> c(Down(1)))
+    h -> do_middle(width, h - 1, [middle(width), ..acc])
   }
 }
 
-fn middle() -> String {
+fn middle(width: Int) -> String {
   let fill = " "
-  let width = 30
   ["│", string.repeat(fill, width), "│"] |> string.join("")
 }
 
@@ -633,27 +677,33 @@ fn draw_btn(btn: Btn) -> String {
   |> string.join("")
 }
 
-fn draw(node: Node(msg)) -> String {
-  let width = 30
-  let height = 1
-  let fill = "█"
-  let fill = " "
-  let title = "username"
-  let top = fn() { ["╭", string.repeat("─", width), "╮"] |> string.join("") }
-  let top = fn() {
-    [
-      "╭",
-      "─",
-      " ",
-      "username",
-      " ",
-      string.repeat("─", width - 3 - string.length(title)),
-      "╮",
-    ]
+fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
+  let top =
+    case title {
+      Some(title) -> [
+        "╭",
+        "─",
+        " ",
+        title,
+        " ",
+        string.repeat("─", width - 3 - string.length(title)),
+        "╮",
+      ]
+      None -> ["╭", string.repeat("─", width), "╮"]
+    }
     |> string.join("")
-  }
-  let bottom = fn() { ["╰", string.repeat("─", width), "╯"] |> string.join("") }
-  [top(), do_middle(height, []), bottom()] |> string.join("\n")
+  let bottom = ["╰", string.repeat("─", width), "╯"] |> string.join("")
+  let start = c(Left(width + 2)) <> c(Down(1))
+  [
+    top,
+    start,
+    do_middle(width, height, []),
+    start,
+    bottom,
+    c(Up(height)),
+    c(Left(width)),
+  ]
+  |> string.join("")
 }
 
 //
@@ -668,6 +718,8 @@ type TermCode {
   HideCursor
   ShowCursor
   Pos(x: Int, y: Int)
+  SavePos
+  LoadPos
   Up(Int)
   Down(Int)
   Left(Int)
@@ -678,6 +730,8 @@ type TermCode {
   Bg(Color)
   Reset
   GetPos
+  AltBuffer
+  MainBuffer
 }
 
 fn c(code: TermCode) -> String {
@@ -688,6 +742,8 @@ fn c(code: TermCode) -> String {
     ShowCursor -> esc <> "[?25h"
     Pos(x, y) ->
       esc <> "[" <> int.to_string(x) <> ";" <> int.to_string(y) <> "H"
+    SavePos -> esc <> "[s"
+    LoadPos -> esc <> "[u"
     Up(i) -> esc <> "[" <> int.to_string(i) <> "A"
     Down(i) -> esc <> "[" <> int.to_string(i) <> "B"
     Left(i) -> esc <> "[" <> int.to_string(i) <> "D"
@@ -698,6 +754,8 @@ fn c(code: TermCode) -> String {
     Bg(color) -> esc <> "[4" <> col(color) <> "m"
     Reset -> esc <> "[0m"
     GetPos -> esc <> "[6n"
+    AltBuffer -> esc <> "[?1049h"
+    MainBuffer -> esc <> "[?1049l"
   }
 }
 
@@ -754,7 +812,7 @@ fn get_pos() -> #(Int, Int) {
   |> list.map(int.parse)
   |> fn(i) {
     case i {
-      [Ok(a), Ok(b)] -> #(a, b)
+      [Ok(a), Ok(b)] -> #(a, b) |> echo
       fixme -> {
         fixme |> echo
         #(-1, -1)
