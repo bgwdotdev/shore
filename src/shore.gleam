@@ -356,9 +356,9 @@ fn detect_event(
     Input(_, _, _, event) -> None
     HR | BR -> None
     Text(..) | TextMulti(..) -> None
-    Button(_, key, event) if input == key.Char(key) -> Some(event)
+    Button(_, key, event) if input == key -> Some(event)
     Button(..) -> None
-    KeyBind(key, event) if input == key.Char(key) -> Some(event)
+    KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
     Div(children, _) | Box(children, _, _, _) ->
       do_detect_event(state, children, input)
@@ -414,7 +414,7 @@ fn render_node(
       |> string.join(sep(In))
     }
     Button(text, input, _) ->
-      draw_btn(Btn(10, 1, "", text, last_input == key.Char(input)))
+      draw_btn(Btn(10, 1, "", text, last_input == input))
     KeyBind(..) -> ""
     Input(width, label, value, _event) -> {
       let #(is_focused, cursor) = case state.focused {
@@ -515,9 +515,9 @@ pub type Node(msg) {
   /// A multi-line text string
   TextMulti(text: String, fg: Option(Color), bg: Option(Color))
   /// A button assigned to a key press to execute an event
-  Button(text: String, key: String, event: msg)
+  Button(text: String, key: Key, event: msg)
   /// A non-visible button assigned to a key press to execute an event
-  KeyBind(key: String, event: msg)
+  KeyBind(key: Key, event: msg)
   /// A container element for holding other nodes
   Div(children: List(Node(msg)), separator: Separator)
   /// A box container element for holding other nodes
