@@ -54,7 +54,7 @@ type Mode {
 pub fn start(spec: Spec(model, msg)) -> Subject(Event(msg)) {
   raw_erl()
   // TODO: set this and fix exit
-  // { c(HideCursor) <> c(AltBuffer) } |> io.print
+  { c(HideCursor) <> c(AltBuffer) } |> io.print
   let assert Ok(shore) = shore_start(spec)
   process.start(fn() { read_input(shore) }, False)
   shore
@@ -385,7 +385,9 @@ fn do_detect_event(
 //
 
 fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
-  { c(Clear) <> node |> render_node(state, _, last_input) }
+  let assert Ok(width) = terminal_columns() as "failed to get terminal size"
+  let assert Ok(height) = terminal_rows() as "failed to get terminal size"
+  { c(Clear) <> node |> render_node(state, _, last_input, width, height) }
   |> io.print
 }
 
@@ -393,17 +395,23 @@ fn render_node(
   state: State(model, msg),
   node: Node(msg),
   last_input: Key,
+  parent_width: Int,
+  parent_height: Int,
 ) -> String {
   case node {
     Div(children, separator) ->
-      list.map(children, render_node(state, _, last_input))
+      list.map(children, render_node(
+        state,
+        _,
+        last_input,
+        parent_width,
+        parent_height,
+      ))
       |> string.join(sep(separator))
     Box(children, width, height, title) -> {
-      [
-        draw_box(width, height, title),
-        ..list.map(children, render_node(state, _, last_input))
-      ]
-      |> string.join(sep(Col))
+      draw_box(width, height, title)
+      <> list.map(children, render_node(state, _, last_input, width, height))
+      |> string.join(sep(In))
     }
     Button(text, input, _) ->
       draw_btn(Btn(10, 1, "", text, last_input == key.Char(input)))
@@ -435,13 +443,13 @@ fn render_node(
     Text(text, fg, bg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
       <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-      <> text
+      <> text |> string.slice(0, parent_width - 2)
       <> c(Reset)
 
     TextMulti(text, fg, bg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
       <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-      <> text |> text_to_multi
+      <> text |> text_to_multi(parent_width, parent_height)
       <> c(Reset)
 
     HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
@@ -449,9 +457,15 @@ fn render_node(
   }
 }
 
-fn text_to_multi(text: String) -> String {
+fn text_to_multi(text: String, width: Int, height: Int) -> String {
   c(SavePos)
-  <> { text |> string.replace("\n", c(LoadPos) <> c(Down(1)) <> c(SavePos)) }
+  <> {
+    text
+    |> string.split("\n")
+    |> list.take(height)
+    |> list.map(string.slice(_, 0, width - 2))
+    |> string.join(c(LoadPos) <> c(Down(1)) <> c(SavePos))
+  }
   <> c(LoadPos)
   <> c(Down(1))
 }
@@ -460,6 +474,7 @@ fn sep(separator: Separator) -> String {
   case separator {
     Row -> c(Right(1))
     Col -> c(Down(1)) <> c(StartLine)
+    In -> c(LoadPos) <> c(Down(1)) <> c(SavePos)
   }
 }
 
@@ -512,6 +527,7 @@ pub type Node(msg) {
 pub type Separator {
   Row
   Col
+  In
 }
 
 fn do_middle(width: Int, height: Int, acc: List(String)) -> String {
@@ -695,13 +711,16 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
   let bottom = ["╰", string.repeat("─", width), "╯"] |> string.join("")
   let start = c(Left(width + 2)) <> c(Down(1))
   [
+    c(SavePos),
     top,
     start,
     do_middle(width, height, []),
     start,
     bottom,
-    c(Up(height)),
-    c(Left(width)),
+    c(LoadPos),
+    c(Down(1)),
+    c(Right(2)),
+    c(SavePos),
   ]
   |> string.join("")
 }

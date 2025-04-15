@@ -65,6 +65,10 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
     GetFileInfo(Error(e)) -> #(append_err(e, model), [])
 
     ReadFile(Ok(content)) -> #(Model(..model, content:), [])
+    ReadFile(Error(ErrSimplifile(simplifile.Eisdir))) -> #(
+      Model(..model, content: ""),
+      [],
+    )
     ReadFile(Error(e)) -> #(append_err(e, model), [])
 
     Up -> {
@@ -112,39 +116,50 @@ fn do_update_read(files: List(File), focused: Int, idx: Int) -> File {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.Div(
-    [
-      shore.KeyBind("k", Up),
-      shore.KeyBind("j", Down),
-      model.work_dir |> shore.Text(None, None),
-      shore.HR,
+  case model.errors {
+    [] -> {
       shore.Div(
         [
-          shore.Box(
-            model.files
-              |> list.sort(fn(a, b) {
-                string.compare(
-                  string.lowercase(a.name),
-                  string.lowercase(b.name),
-                )
-              })
-              |> list.index_map(fn(f, i) { view_file(f, i, model.focused) }),
-            70,
-            list.length(model.files),
-            Some("file"),
-          ),
-          shore.Box(
-            [model.content |> shore.TextMulti(None, None)],
-            70,
-            20,
-            Some("preview"),
+          shore.KeyBind("k", Up),
+          shore.KeyBind("j", Down),
+          model.work_dir |> shore.Text(None, None),
+          shore.HR,
+          shore.Div(
+            [
+              shore.Box(
+                model.files
+                  |> list.sort(fn(a, b) {
+                    string.compare(
+                      string.lowercase(a.name),
+                      string.lowercase(b.name),
+                    )
+                  })
+                  |> list.index_map(fn(f, i) { view_file(f, i, model.focused) }),
+                70,
+                list.length(model.files),
+                Some("file"),
+              ),
+              shore.BR,
+              shore.BR,
+              shore.Box(
+                [model.content |> shore.TextMulti(None, None)],
+                70,
+                20,
+                Some("preview"),
+              ),
+            ],
+            shore.Col,
           ),
         ],
-        shore.Row,
-      ),
-    ],
-    shore.Col,
-  )
+        shore.Col,
+      )
+    }
+    xs ->
+      xs
+      |> list.map(string.inspect)
+      |> list.map(shore.Text(_, None, None))
+      |> shore.Div(shore.Col)
+  }
 }
 
 fn view_file(file: File, idx: Int, focused: Int) -> shore.Node(msg) {
