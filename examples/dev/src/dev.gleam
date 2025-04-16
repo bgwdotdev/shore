@@ -4,6 +4,7 @@ import gleam/io
 import gleam/option.{None, Some}
 import gleam/pair
 import shore
+import shore/key
 
 // MAIN
 
@@ -66,38 +67,41 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 fn view(model: Model) -> shore.Node(Msg) {
   shore.Div(
     [
-      "HELLO WORLD" |> shore.Text(None),
+      "HELLO WORLD" |> shore.Text(None, None),
       shore.HR,
       shore.Input(20, "hi", model.hi, SetHi),
       shore.BR,
       shore.BR,
-      model.hi |> shore.Text(None),
+      model.hi |> shore.Text(None, None),
       shore.BR,
       shore.BR,
       shore.Input(25, "bye", model.bye, SetBye),
       shore.BR,
-      model.bye |> shore.Text(None),
+      model.bye |> shore.Text(None, None),
       shore.BR,
       shore.Input(20, "try", "", FixMe),
       shore.BR,
       shore.BR,
-      model.counter |> int.to_string |> shore.Text(Some(shore.Black)),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Red)),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Green)),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Yellow)),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Blue)),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Magenta)),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Cyan)),
-      model.counter |> int.to_string |> shore.Text(Some(shore.White)),
+      model.counter |> int.to_string |> shore.Text(Some(shore.Black), None),
+      model.counter |> int.to_string |> shore.Text(Some(shore.Red), None),
+      model.counter |> int.to_string |> shore.Text(Some(shore.Green), None),
+      model.counter |> int.to_string |> shore.Text(Some(shore.Yellow), None),
+      model.counter |> int.to_string |> shore.Text(Some(shore.Blue), None),
+      model.counter |> int.to_string |> shore.Text(Some(shore.Magenta), None),
+      model.counter |> int.to_string |> shore.Text(Some(shore.Cyan), None),
+      model.counter |> int.to_string |> shore.Text(Some(shore.White), None),
       shore.BR,
       shore.Div(
-        [shore.Button("++", "a", Increment), shore.Button("-", "b", Decrement)],
+        [
+          shore.Button("++", key.Char("a"), Increment),
+          shore.Button("-", key.Char("b"), Decrement),
+        ],
         shore.Row,
       ),
       case model.counter {
-        x if x > 10 && x < 20 -> shore.Button("reset", "r", SendReset)
-        x if x > 20 -> shore.Button("dd", "d", Set(0))
-        x -> shore.Text("x", Some(shore.Red))
+        x if x > 10 && x < 20 -> shore.Button("reset", key.Char("r"), SendReset)
+        x if x > 20 -> shore.Button("dd", key.Char("d"), Set(0))
+        x -> shore.Text("x", Some(shore.Red), None)
       },
     ],
     shore.Col,

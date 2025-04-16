@@ -2,6 +2,7 @@ import gleam/erlang/process
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/otp/task
 import gleam/result
 import gleam/string
 import shore
@@ -60,7 +61,7 @@ type Msg {
   DismissErrors
   Pwd(Result(String, Err))
   GetFiles(Result(List(String), Err))
-  GetFileInfo(Result(File, Err))
+  GetFilesInfo(Result(List(File), Err))
   ReadFile(Result(String, Err))
   Up
   Down
@@ -90,28 +91,23 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
     )
     Pwd(Error(e)) -> #(append_err(e, model), [])
 
-    GetFiles(Ok(files)) -> #(
-      Model(..model, file_count: list.length(files)),
-      files |> list.map(file_info(_, model.work_dir)),
-    )
+    GetFiles(Ok(files)) -> #(Model(..model, file_count: list.length(files)), [
+      files_info(files, model.work_dir),
+    ])
     GetFiles(Error(e)) -> #(append_err(e, model), [])
 
-    GetFileInfo(Ok(file)) -> {
-      let files = [file, ..model.files]
+    GetFilesInfo(Ok(files)) -> {
       let model = Model(..model, files:)
-      let cmds = case list.length(files) == model.file_count {
-        True -> [update_read(model)]
-        False -> []
-      }
-      #(model, cmds)
+      #(model, [update_read(model)])
     }
-    GetFileInfo(Error(e)) -> #(append_err(e, model), [])
+    GetFilesInfo(Error(e)) -> #(append_err(e, model), [])
 
     ReadFile(Ok(content)) -> #(Model(..model, content:), [])
     ReadFile(Error(ErrSimplifile(e, _))) -> #(
       Model(..model, content: "error: " <> simplifile.describe_error(e)),
       [],
     )
+    ReadFile(Error(_)) -> #(model, [])
 
     Up -> {
       let model = Model(..model, focused: int.max(model.focused - 1, 0))
@@ -189,42 +185,39 @@ fn do_update_read(files: List(File), focused: Int, idx: Int) -> File {
 fn view(model: Model) -> shore.Node(Msg) {
   case model.errors {
     [] -> {
-      shore.Div(
-        [
-          shore.KeyBind(key.Char("k"), Up),
-          shore.KeyBind(key.Char("j"), Down),
-          shore.KeyBind(key.Char("l"), Open),
-          shore.KeyBind(key.Char("h"), Back),
-          model.work_dir
-            |> list.reverse
-            |> string.join("/")
-            |> string.replace("//", "/")
-            |> shore.Text(None, None),
-          shore.HR,
-          shore.Div(
-            [
-              shore.Box(
-                model.files
-                  |> sort_files
-                  |> list.index_map(fn(f, i) { view_file(f, i, model.focused) }),
-                70,
-                list.length(model.files),
-                Some("file"),
-              ),
-              shore.BR,
-              shore.BR,
-              shore.Box(
-                [model.content |> shore.TextMulti(None, None)],
-                70,
-                20,
-                Some("preview"),
-              ),
-            ],
-            shore.Col,
-          ),
-        ],
-        shore.Col,
-      )
+      shore.Split(shore.Split2(
+        shore.Horizontal,
+        shore.Ratio2(2, 98),
+        shore.Split1(shore.Div(
+          [
+            shore.KeyBind(key.Char("k"), Up),
+            shore.KeyBind(key.Char("j"), Down),
+            shore.KeyBind(key.Char("l"), Open),
+            shore.KeyBind(key.Char("h"), Back),
+            model.work_dir
+              |> list.reverse
+              |> string.join("/")
+              |> string.replace("//", "/")
+              |> shore.Text(None, None),
+            shore.HR,
+          ],
+          shore.Col,
+        )),
+        shore.Split2(
+          shore.Vertical,
+          shore.Ratio2(50, 50),
+          shore.Split1(shore.Box(
+            model.files
+              |> sort_files
+              |> list.index_map(fn(f, i) { view_file(f, i, model.focused) }),
+            Some("files"),
+          )),
+          shore.Split1(shore.Box(
+            [model.content |> shore.TextMulti(None, None)],
+            Some("preview"),
+          )),
+        ),
+      ))
     }
     xs ->
       shore.Div(
@@ -275,16 +268,25 @@ fn read_directory(dir: String) -> fn() -> Msg {
   }
 }
 
-fn file_info(item: String, work_dir: List(String)) -> fn() -> Msg {
+fn files_info(items: List(String), work_dir: List(String)) -> fn() -> Msg {
   fn() {
-    let path = item |> relative_path(work_dir)
-    simplifile.file_info(path)
-    |> result.try_recover(fn(_) { simplifile.link_info(path) })
-    |> result.map_error(ErrSimplifile(_, item))
-    |> result.map(fn(info) {
-      File(name: item, info:, type_: simplifile.file_info_type(info), path:)
+    list.map(items, fn(item) {
+      fn() {
+        let path = item |> relative_path(work_dir)
+        simplifile.file_info(path)
+        |> result.try_recover(fn(_) { simplifile.link_info(path) })
+        |> result.map_error(ErrSimplifile(_, item))
+        |> result.map(fn(info) {
+          File(name: item, info:, type_: simplifile.file_info_type(info), path:)
+        })
+      }
+      |> task.async
     })
-    |> GetFileInfo
+    |> task.try_await_all(100)
+    |> list.map(result.map_error(_, ErrTask))
+    |> list.map(result.flatten)
+    |> result.all
+    |> GetFilesInfo
   }
 }
 
@@ -322,4 +324,5 @@ fn read(file: File) -> Msg {
 
 type Err {
   ErrSimplifile(error: simplifile.FileError, file: String)
+  ErrTask(error: task.AwaitError)
 }
