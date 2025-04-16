@@ -345,7 +345,7 @@ fn detect_event(
 ) -> Option(msg) {
   case node {
     Input(_, _, _, event) -> None
-    HR | BR -> None
+    HR | HR2(..) | BR -> None
     Text(..) | TextMulti(..) -> None
     Button(_, key, event) if input == key -> Some(event)
     Button(..) -> None
@@ -358,8 +358,9 @@ fn detect_event(
         Split2(a:, b:, ..) ->
           detect_event(state, Split(a), input)
           |> option.lazy_or(fn() { detect_event(state, Split(b), input) })
-        Split1(children) -> do_detect_event(state, children, input)
+        Split1(node) -> detect_event(state, node, input)
       }
+    Debug -> None
   }
 }
 
@@ -382,10 +383,15 @@ fn do_detect_event(
 // RENDER
 //
 
+type Pos {
+  Pos(x: Int, y: Int, width: Int, height: Int)
+}
+
 fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
   let assert Ok(width) = terminal_columns() as "failed to get terminal size"
   let assert Ok(height) = terminal_rows() as "failed to get terminal size"
-  { c(Clear) <> node |> render_node(state, _, last_input, width, height) }
+  let pos = Pos(0, 0, width, height)
+  { c(Clear) <> node |> render_node(state, _, last_input, pos) }
   |> io.print
 }
 
@@ -393,83 +399,87 @@ fn render_node(
   state: State(model, msg),
   node: Node(msg),
   last_input: Key,
-  parent_width: Int,
-  parent_height: Int,
+  pos: Pos,
 ) -> String {
   case node {
     Split(splits) ->
       case splits {
-        Split1(children) ->
-          list.map(children, render_node(
-            state,
-            _,
-            last_input,
-            parent_width,
-            parent_height,
-          ))
-          |> string.join(sep(Col))
+        Split1(node) -> render_node(state, node, last_input, pos)
         Split2(direction:, ratio:, a:, b:) ->
           case direction {
             Horizontal ->
               [
-                c(SavePos),
+                c(SetPos(pos.x, pos.y)),
                 render_node(
                   state,
                   Split(a),
                   last_input,
-                  parent_width - 2,
-                  parent_height * ratio.a / 100,
+                  Pos(
+                    ..pos,
+                    width: pos.width,
+                    height: percent(pos.height, ratio.a),
+                  ),
                 ),
-                c(LoadPos),
-                c(Down(parent_height * ratio.a / 100)),
-                c(Left(2)),
+                c(SetPos(pos.x + 1 + percent(pos.height, ratio.a), pos.y)),
                 render_node(
                   state,
                   Split(b),
                   last_input,
-                  parent_width - 2,
-                  parent_height * ratio.b / 100,
+                  Pos(
+                    x: percent(pos.height, ratio.a) + 1,
+                    y: pos.y,
+                    width: pos.width,
+                    height: percent(pos.height, ratio.b),
+                  ),
                 ),
               ]
               |> string.join("")
             Vertical ->
               [
+                c(SetPos(pos.x, pos.y)),
                 render_node(
                   state,
                   Split(a),
                   last_input,
-                  { parent_width - 4 } * ratio.a / 100,
-                  parent_height,
+                  Pos(
+                    ..pos,
+                    width: percent(pos.width, ratio.a),
+                    height: pos.height,
+                  ),
                 ),
-                c(Up(6)),
-                c(Right(parent_width * ratio.a / 100 - 6)),
+                c(SetPos(pos.x, pos.y + 1 + percent(pos.width, ratio.a))),
                 render_node(
                   state,
                   Split(b),
                   last_input,
-                  { parent_width - 4 } * ratio.b / 100,
-                  parent_height,
+                  Pos(
+                    x: pos.x,
+                    y: percent(pos.width, ratio.a) + 1,
+                    width: percent(pos.width, ratio.b),
+                    height: pos.height,
+                  ),
                 ),
               ]
               |> string.join("")
           }
       }
+    Debug -> string.inspect(pos)
     Div(children, separator) ->
-      list.map(children, render_node(
-        state,
-        _,
-        last_input,
-        parent_width,
-        parent_height,
-      ))
+      list.map(children, render_node(state, _, last_input, pos))
       |> string.join(sep(separator))
     Box(children, width, height, title) -> {
       draw_box(
-        parent_width,
-        parent_height,
-        Some(int.to_string(parent_width) <> " " <> int.to_string(parent_height)),
+        pos.width - 4,
+        pos.height - 4,
+        Some(int.to_string(pos.width) <> " " <> int.to_string(pos.height)),
       )
-      <> list.map(children, render_node(state, _, last_input, width, height))
+      <> list.map(children, render_node(
+        state,
+        _,
+        last_input,
+        //Pos(..pos, width:, height:),
+        pos,
+      ))
       |> string.join(sep(In))
     }
     Button(text, input, _) ->
@@ -502,17 +512,18 @@ fn render_node(
     Text(text, fg, bg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
       <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-      <> text |> string.slice(0, parent_width - 2)
+      <> text |> string.slice(0, pos.width - 2)
       <> c(Reset)
 
     TextMulti(text, fg, bg) ->
       { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
       <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-      <> text |> text_to_multi(parent_width, parent_height)
+      <> text |> text_to_multi(pos.width, pos.height)
       <> c(Reset)
 
     //HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
-    HR -> string.repeat("─", parent_width)
+    HR -> string.repeat("─", pos.width)
+    HR2(color) -> c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset)
     BR -> "\n"
   }
 }
@@ -536,6 +547,10 @@ fn sep(separator: Separator) -> String {
     Col -> c(Down(1)) <> c(StartLine)
     In -> c(LoadPos) <> c(Down(1)) <> c(SavePos)
   }
+}
+
+fn percent(x: Int, r: Int) -> Int {
+  x * r / 100
 }
 
 //
@@ -568,6 +583,7 @@ pub type Node(msg) {
   Input(width: Int, label: String, value: String, event: fn(String) -> msg)
   /// A horizontal line
   HR
+  HR2(color: Color)
   /// An empty line
   BR
   /// A text string
@@ -584,11 +600,12 @@ pub type Node(msg) {
   Box(children: List(Node(msg)), width: Int, height: Int, title: Option(String))
   ///
   Split(Splits(msg))
+  Debug
 }
 
 /// TODO
 pub type Splits(msg) {
-  Split1(children: List(Node(msg)))
+  Split1(node: Node(msg))
   Split2(direction: Direction, ratio: Ratio2, a: Splits(msg), b: Splits(msg))
 }
 
@@ -813,7 +830,7 @@ type TermCode {
   Top
   HideCursor
   ShowCursor
-  Pos(x: Int, y: Int)
+  SetPos(x: Int, y: Int)
   SavePos
   LoadPos
   Up(Int)
@@ -836,7 +853,7 @@ fn c(code: TermCode) -> String {
     Top -> esc <> "[H"
     HideCursor -> esc <> "[?25l"
     ShowCursor -> esc <> "[?25h"
-    Pos(x, y) ->
+    SetPos(x, y) ->
       esc <> "[" <> int.to_string(x) <> ";" <> int.to_string(y) <> "H"
     SavePos -> esc <> "[s"
     LoadPos -> esc <> "[u"
