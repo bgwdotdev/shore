@@ -391,8 +391,13 @@ fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
   let assert Ok(width) = terminal_columns() as "failed to get terminal size"
   let assert Ok(height) = terminal_rows() as "failed to get terminal size"
   let pos = Pos(0, 0, width, height)
-  { c(Clear) <> node |> render_node(state, _, last_input, pos) }
+  c(BSU) |> io.print
+  {
+    c(Clear)
+    <> node |> render_node(state, _, last_input, pos) |> option.unwrap("")
+  }
   |> io.print
+  c(ESU) |> io.print
 }
 
 fn render_node(
@@ -845,6 +850,10 @@ type TermCode {
   GetPos
   AltBuffer
   MainBuffer
+  /// Begin Synchronized Output
+  BSU
+  /// End Synchronized Output
+  ESU
 }
 
 fn c(code: TermCode) -> String {
@@ -869,6 +878,8 @@ fn c(code: TermCode) -> String {
     GetPos -> esc <> "[6n"
     AltBuffer -> esc <> "[?1049h"
     MainBuffer -> esc <> "[?1049l"
+    BSU -> esc <> "[?2026h"
+    ESU -> esc <> "[?2026l"
   }
 }
 
