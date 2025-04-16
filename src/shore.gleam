@@ -314,16 +314,7 @@ fn list_focusable(
         Input(width, label, value, event) -> {
           let cursor = string.length(value)
           let focused =
-            Focused(
-              label:,
-              value:,
-              event:,
-              //cursor: 0,
-              offset: 0,
-              cursor:,
-              //offset: string.length(value),
-              width:,
-            )
+            Focused(label:, value:, event:, offset: 0, cursor:, width:)
           let offset = input_offset(cursor, focused.offset, focused.width)
           list_focusable(xs, [Focused(..focused, offset:), ..acc])
         }
@@ -362,6 +353,13 @@ fn detect_event(
     KeyBind(..) -> None
     Div(children, _) | Box(children, _, _, _) ->
       do_detect_event(state, children, input)
+    Split(splits) ->
+      case splits {
+        Split2(a:, b:, ..) ->
+          detect_event(state, Split(a), input)
+          |> option.lazy_or(fn() { detect_event(state, Split(b), input) })
+        Split1(children) -> do_detect_event(state, children, input)
+      }
   }
 }
 
@@ -399,6 +397,63 @@ fn render_node(
   parent_height: Int,
 ) -> String {
   case node {
+    Split(splits) ->
+      case splits {
+        Split1(children) ->
+          list.map(children, render_node(
+            state,
+            _,
+            last_input,
+            parent_width,
+            parent_height,
+          ))
+          |> string.join(sep(Col))
+        Split2(direction:, ratio:, a:, b:) ->
+          case direction {
+            Horizontal ->
+              [
+                c(SavePos),
+                render_node(
+                  state,
+                  Split(a),
+                  last_input,
+                  parent_width - 2,
+                  parent_height * ratio.a / 100,
+                ),
+                c(LoadPos),
+                c(Down(parent_height * ratio.a / 100)),
+                c(Left(2)),
+                render_node(
+                  state,
+                  Split(b),
+                  last_input,
+                  parent_width - 2,
+                  parent_height * ratio.b / 100,
+                ),
+              ]
+              |> string.join("")
+            Vertical ->
+              [
+                render_node(
+                  state,
+                  Split(a),
+                  last_input,
+                  { parent_width - 4 } * ratio.a / 100,
+                  parent_height,
+                ),
+                c(Up(6)),
+                c(Right(parent_width * ratio.a / 100 - 6)),
+                render_node(
+                  state,
+                  Split(b),
+                  last_input,
+                  { parent_width - 4 } * ratio.b / 100,
+                  parent_height,
+                ),
+              ]
+              |> string.join("")
+          }
+      }
     Div(children, separator) ->
       list.map(children, render_node(
         state,
@@ -409,7 +464,11 @@ fn render_node(
       ))
       |> string.join(sep(separator))
     Box(children, width, height, title) -> {
-      draw_box(width, height, title)
+      draw_box(
+        parent_width,
+        parent_height,
+        Some(int.to_string(parent_width) <> " " <> int.to_string(parent_height)),
+      )
       <> list.map(children, render_node(state, _, last_input, width, height))
       |> string.join(sep(In))
     }
@@ -452,7 +511,8 @@ fn render_node(
       <> text |> text_to_multi(parent_width, parent_height)
       <> c(Reset)
 
-    HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
+    //HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
+    HR -> string.repeat("─", parent_width)
     BR -> "\n"
   }
 }
@@ -522,6 +582,23 @@ pub type Node(msg) {
   Div(children: List(Node(msg)), separator: Separator)
   /// A box container element for holding other nodes
   Box(children: List(Node(msg)), width: Int, height: Int, title: Option(String))
+  ///
+  Split(Splits(msg))
+}
+
+/// TODO
+pub type Splits(msg) {
+  Split1(children: List(Node(msg)))
+  Split2(direction: Direction, ratio: Ratio2, a: Splits(msg), b: Splits(msg))
+}
+
+pub type Ratio2 {
+  Ratio2(a: Int, b: Int)
+}
+
+pub type Direction {
+  Horizontal
+  Vertical
 }
 
 pub type Separator {
