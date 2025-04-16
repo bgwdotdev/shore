@@ -405,7 +405,7 @@ fn render_node(
   node: Node(msg),
   last_input: Key,
   pos: Pos,
-) -> String {
+) -> Option(String) {
   case node {
     Split(splits) ->
       case splits {
@@ -414,7 +414,7 @@ fn render_node(
           case direction {
             Horizontal ->
               [
-                c(SetPos(pos.x, pos.y)),
+                c(SetPos(pos.x, pos.y)) |> Some,
                 render_node(
                   state,
                   Split(a),
@@ -425,7 +425,8 @@ fn render_node(
                     height: percent(pos.height, ratio.a),
                   ),
                 ),
-                c(SetPos(pos.x + 1 + percent(pos.height, ratio.a), pos.y)),
+                c(SetPos(pos.x + 1 + percent(pos.height, ratio.a), pos.y))
+                  |> Some,
                 render_node(
                   state,
                   Split(b),
@@ -438,10 +439,12 @@ fn render_node(
                   ),
                 ),
               ]
+              |> option.values
               |> string.join("")
+              |> Some
             Vertical ->
               [
-                c(SetPos(pos.x, pos.y)),
+                c(SetPos(pos.x, pos.y)) |> Some,
                 render_node(
                   state,
                   Split(a),
@@ -452,7 +455,8 @@ fn render_node(
                     height: pos.height,
                   ),
                 ),
-                c(SetPos(pos.x, pos.y + 1 + percent(pos.width, ratio.a))),
+                c(SetPos(pos.x, pos.y + 1 + percent(pos.width, ratio.a)))
+                  |> Some,
                 render_node(
                   state,
                   Split(b),
@@ -465,31 +469,30 @@ fn render_node(
                   ),
                 ),
               ]
+              |> option.values
               |> string.join("")
+              |> Some
           }
       }
-    Debug -> string.inspect(pos)
+    Debug -> string.inspect(pos) |> Some
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input, pos))
+      |> option.values
       |> string.join(sep(separator))
+      |> Some
     Box(children, title) -> {
-      draw_box(
-        pos.width - 4,
-        pos.height - 4,
-        Some(int.to_string(pos.width) <> " " <> int.to_string(pos.height)),
-      )
-      <> list.map(children, render_node(
-        state,
-        _,
-        last_input,
-        //Pos(..pos, width:, height:),
-        pos,
-      ))
+      let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
+      [
+        draw_box(pos.width, pos.height + 1, title),
+        ..list.map(children, render_node(state, _, last_input, pos))
+        |> option.values
+      ]
       |> string.join(sep(In))
+      |> Some
     }
     Button(text, input, _) ->
-      draw_btn(Btn(10, 1, "", text, last_input == input))
-    KeyBind(..) -> ""
+      draw_btn(Btn(10, 1, "", text, last_input == input)) |> Some
+    KeyBind(..) -> None
     Input(width, label, value, _event) -> {
       let #(is_focused, cursor) = case state.focused {
         Some(focused) if focused.label == label -> #(True, focused.cursor)
@@ -513,23 +516,31 @@ fn render_node(
         cursor,
         offset,
       ))
+      |> Some
     }
     Text(text, fg, bg) ->
-      { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
-      <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-      <> text |> string.slice(0, pos.width - 2)
-      <> c(Reset)
+      {
+        { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+        <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
+        <> text |> string.slice(0, pos.width - 2)
+        <> c(Reset)
+      }
+      |> Some
 
     TextMulti(text, fg, bg) ->
-      { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
-      <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-      <> text |> text_to_multi(pos.width, pos.height)
-      <> c(Reset)
+      {
+        { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+        <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
+        <> text |> text_to_multi(pos.width, pos.height)
+        <> c(Reset)
+      }
+      |> Some
 
     //HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
-    HR -> string.repeat("─", pos.width)
-    HR2(color) -> c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset)
-    BR -> "\n"
+    HR -> string.repeat("─", pos.width) |> Some
+    HR2(color) ->
+      { c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) } |> Some
+    BR -> "\n" |> Some
   }
 }
 
@@ -817,7 +828,6 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
     start,
     bottom,
     c(LoadPos),
-    c(Down(1)),
     c(Right(2)),
     c(SavePos),
   ]
