@@ -309,7 +309,7 @@ fn list_focusable(
     [] -> acc
     [x, ..xs] ->
       case x {
-        Div(children, _) | Box(children, _, _, _) ->
+        Div(children, _) | Box(children, _) ->
           list_focusable(xs, list_focusable(children, acc))
         Input(width, label, value, event) -> {
           let cursor = string.length(value)
@@ -351,7 +351,7 @@ fn detect_event(
     Button(..) -> None
     KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
-    Div(children, _) | Box(children, _, _, _) ->
+    Div(children, _) | Box(children, _) ->
       do_detect_event(state, children, input)
     Split(splits) ->
       case splits {
@@ -467,7 +467,7 @@ fn render_node(
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input, pos))
       |> string.join(sep(separator))
-    Box(children, width, height, title) -> {
+    Box(children, title) -> {
       draw_box(
         pos.width - 4,
         pos.height - 4,
@@ -597,7 +597,7 @@ pub type Node(msg) {
   /// A container element for holding other nodes
   Div(children: List(Node(msg)), separator: Separator)
   /// A box container element for holding other nodes
-  Box(children: List(Node(msg)), width: Int, height: Int, title: Option(String))
+  Box(children: List(Node(msg)), title: Option(String))
   ///
   Split(Splits(msg))
   Debug
