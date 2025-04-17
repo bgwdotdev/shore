@@ -793,28 +793,13 @@ fn draw_input(btn: Iput) -> String {
   let width = btn.width + 2
   let start = c(Left(width)) <> c(Down(1))
   let top_right = c(Up(1 + btn.height))
-  [
-    color,
-    top(),
-    start,
-    middle(),
-    start,
-    bottom(),
-    top_right,
-    // // DEBUG
-    //" ",
-    //int.to_string(btn.cursor),
-    //" ",
-    //btn.offset |> int.to_string,
-    //" ",
-    //btn.text |> string.length |> int.to_string,
-    //" ",
-    //padding |> int.to_string,
-    //" ",
-    //text_trim |> string.length |> int.to_string,
-    Reset |> c,
-  ]
-  |> string.join("")
+
+  case btn.style {
+    Simple -> [color, btn.title, " ", c(Reset), text_trim] |> string.join("")
+    Border ->
+      [color, top(), start, middle(), start, bottom(), top_right, Reset |> c]
+      |> string.join("")
+  }
 }
 
 fn map_cursor(str: String, cursor: Int, width: Int) -> String {
