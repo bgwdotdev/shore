@@ -211,7 +211,7 @@ fn detect_event(
   input: Key,
 ) -> Option(msg) {
   case node {
-    Input(_, _, _, event) -> None
+    Input(event:, ..) -> None
     HR | HR2(..) | BR -> None
     Text(..) | TextMulti(..) -> None
     Button(_, key, event) if input == key -> Some(event)
@@ -271,10 +271,25 @@ fn list_focusable(
       case x {
         Div(children, _) | Box(children, _) ->
           list_focusable(xs, list_focusable(children, acc))
-        Input(width, label, value, event) -> {
+        Split(split) -> {
+          case split {
+            Split1(child) -> list_focusable(xs, list_focusable([child], acc))
+            Split2(_, _, a, b) ->
+              list_focusable(xs, list_focusable([Split(a), Split(b)], acc))
+          }
+        }
+        Input(label, value, width, event, _) -> {
           let cursor = string.length(value)
+          let Fixed(todo_width) = width
           let focused =
-            Focused(label:, value:, event:, offset: 0, cursor:, width:)
+            Focused(
+              label:,
+              value:,
+              event:,
+              offset: 0,
+              cursor:,
+              width: todo_width,
+            )
           let offset = input_offset(cursor, focused.offset, focused.width)
           list_focusable(xs, [Focused(..focused, offset:), ..acc])
         }
@@ -527,7 +542,10 @@ fn render_node(
     Button(text, input, _) ->
       draw_btn(Btn(10, 1, "", text, last_input == input)) |> Some
     KeyBind(..) -> None
-    Input(width, label, value, _event) -> {
+    Input(label, value, width, _event, style) -> {
+      let width = case width {
+        Fixed(width) -> width
+      }
       let #(is_focused, cursor) = case state.focused {
         Some(focused) if focused.label == label -> #(True, focused.cursor)
         _ -> #(False, string.length(value))
@@ -549,6 +567,7 @@ fn render_node(
         is_insert,
         cursor,
         offset,
+        style,
       ))
       |> Some
     }
@@ -631,7 +650,13 @@ fn read_input(shore: Subject(Event(msg)), exit: Key) -> Nil {
 
 pub type Node(msg) {
   /// A field for text input
-  Input(width: Int, label: String, value: String, event: fn(String) -> msg)
+  Input(
+    label: String,
+    value: String,
+    width: Size,
+    event: fn(String) -> msg,
+    style: Style,
+  )
   /// A horizontal line
   HR
   HR2(color: Color)
@@ -675,6 +700,15 @@ pub type Separator {
   In
 }
 
+pub type Size {
+  Fixed(Int)
+}
+
+pub type Style {
+  Simple
+  Border
+}
+
 fn do_middle(width: Int, height: Int, acc: List(String)) -> String {
   case height {
     0 -> acc |> string.join(c(Left(width + 2)) <> c(Down(1)))
@@ -701,6 +735,7 @@ type Iput {
     insert: Bool,
     cursor: Int,
     offset: Int,
+    style: Style,
   )
 }
 
@@ -717,7 +752,6 @@ fn draw_input(btn: Iput) -> String {
   let text_trim =
     text
     |> string.slice(btn.offset, in_width)
-    //|> map_cursor(btn.cursor - btn.offset, btn.width)
     |> fn(x) {
       case btn.pressed {
         True -> map_cursor(x, btn.cursor - btn.offset, btn.width)
