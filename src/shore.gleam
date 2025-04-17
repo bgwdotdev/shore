@@ -21,6 +21,8 @@ pub type Spec(model, msg) {
     init: fn() -> #(model, List(fn() -> msg)),
     view: fn(model) -> Node(msg),
     update: fn(model, msg) -> #(model, List(fn() -> msg)),
+    exit: process.Subject(Nil),
+    keybinds: Keybinds,
   )
 }
 
@@ -32,6 +34,28 @@ type State(model, msg) {
     mode: Mode,
     last_input: String,
     focused: Option(Focused(msg)),
+  )
+}
+
+pub type Keybinds {
+  Keybinds(
+    exit: Key,
+    focus_clear: Key,
+    focus_next: Key,
+    focus_prev: Key,
+    mode_insert: Key,
+    mode_normal: Key,
+  )
+}
+
+pub fn default_keybinds() -> Keybinds {
+  Keybinds(
+    exit: key.Char("Q"),
+    focus_clear: key.Esc,
+    focus_next: key.Char("J"),
+    focus_prev: key.Char("K"),
+    mode_insert: key.Char("I"),
+    mode_normal: key.Esc,
   )
 }
 
@@ -56,7 +80,7 @@ pub fn start(spec: Spec(model, msg)) -> Subject(Event(msg)) {
   // TODO: set this and fix exit
   { c(HideCursor) <> c(AltBuffer) } |> io.print
   let assert Ok(shore) = shore_start(spec)
-  process.start(fn() { read_input(shore) }, False)
+  process.start(fn() { read_input(shore, spec.keybinds.exit) }, False)
   shore
 }
 
@@ -117,7 +141,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       case state.mode {
         Normal -> {
           let ui = state.spec.view(state.model)
-          let state = case control_event(input) {
+          let state = case control_event(input, state.spec.keybinds) {
             // TODO: decouple mode from focus clear?
             FocusClear -> State(..state, focused: None, mode: Normal)
             FocusPrev -> {
@@ -153,9 +177,9 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
           actor.continue(state)
         }
         Insert -> {
-          let mode = case input {
-            key.Esc -> Normal
-            _ -> Insert
+          let mode = case input == state.spec.keybinds.mode_normal {
+            True -> Normal
+            False -> Insert
           }
           let #(focused, model) = case state.focused {
             Some(focused) -> {
@@ -175,6 +199,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
     }
     Exit -> {
       { c(ShowCursor) <> c(MainBuffer) } |> io.print
+      process.send(state.spec.exit, Nil)
       actor.Stop(process.Normal)
     }
   }
@@ -289,14 +314,12 @@ type Control {
   PassInput(Key)
 }
 
-fn control_event(input: Key) -> Control {
+fn control_event(input: Key, keybinds: Keybinds) -> Control {
   case input {
-    key.Char("J") -> FocusNext
-    key.Char("K") -> FocusPrev
-    key.Char("I") -> ModeInsert
-    //"f" -> todo
-    //"Q" -> quit
-    key.Esc -> FocusClear
+    x if x == keybinds.focus_clear -> FocusClear
+    x if x == keybinds.focus_next -> FocusNext
+    x if x == keybinds.focus_prev -> FocusPrev
+    x if x == keybinds.mode_insert -> ModeInsert
     x -> PassInput(x)
   }
 }
@@ -579,15 +602,16 @@ fn get_line(prompt: String) -> Charlist
 @external(erlang, "io", "get_chars")
 fn get_chars(prompt: String, count: Int) -> String
 
-fn read_input(shore: Subject(Event(msg))) -> Nil {
+fn read_input(shore: Subject(Event(msg)), exit: Key) -> Nil {
   // TODO: this seems to solve issues with key seuqences but:
   // a) is 10 long enough for expected key codes
   // b) is it possible to have character merges if you press two keys quickly enough?
-  get_chars("", 10)
-  |> key.from_string
-  |> KeyPress
-  |> process.send(shore, _)
-  read_input(shore)
+  let key = get_chars("", 10) |> key.from_string
+  case key == exit {
+    True -> Exit |> process.send(shore, _)
+    False -> key |> KeyPress |> process.send(shore, _)
+  }
+  read_input(shore, exit)
 }
 
 //

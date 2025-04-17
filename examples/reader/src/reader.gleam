@@ -12,8 +12,11 @@ import simplifile
 // MAIN
 
 pub fn main() {
-  let _ = shore.Spec(init:, update:, view:) |> shore.start
-  process.sleep_forever()
+  let exit = process.new_subject()
+  let _ =
+    shore.Spec(init:, update:, view:, exit:, keybinds: shore.default_keybinds())
+    |> shore.start
+  process.receive_forever(exit)
 }
 
 // MODEL

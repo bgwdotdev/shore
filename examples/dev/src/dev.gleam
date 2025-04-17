@@ -9,9 +9,12 @@ import shore/key
 // MAIN
 
 pub fn main() {
-  let ui = shore.Spec(init:, view:, update:) |> shore.start
+  let exit = process.new_subject()
+  let ui =
+    shore.Spec(init:, view:, update:, exit:, keybinds: shore.default_keybinds())
+    |> shore.start
   tick(ui)
-  process.sleep_forever()
+  process.receive_forever(exit)
 }
 
 fn tick(ui: process.Subject(shore.Event(Msg))) {
