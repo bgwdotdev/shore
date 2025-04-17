@@ -573,7 +573,8 @@ fn render_node(
     }
     Text(text, fg, bg) ->
       {
-        { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+        c(Reset)
+        <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
         <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
         <> text |> string.slice(0, pos.width - 2)
         <> c(Reset)
@@ -582,14 +583,14 @@ fn render_node(
 
     TextMulti(text, fg, bg) ->
       {
-        { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+        c(Reset)
+        <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
         <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
         <> text |> text_to_multi(pos.width, pos.height)
         <> c(Reset)
       }
       |> Some
 
-    //HR -> terminal_columns() |> result.unwrap(0) |> string.repeat("─", _)
     HR -> string.repeat("─", pos.width) |> Some
     HR2(color) ->
       { c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) } |> Some
