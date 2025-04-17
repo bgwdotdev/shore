@@ -205,12 +205,102 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
   }
 }
 
+fn detect_event(
+  state: State(model, msg),
+  node: Node(msg),
+  input: Key,
+) -> Option(msg) {
+  case node {
+    Input(_, _, _, event) -> None
+    HR | HR2(..) | BR -> None
+    Text(..) | TextMulti(..) -> None
+    Button(_, key, event) if input == key -> Some(event)
+    Button(..) -> None
+    KeyBind(key, event) if input == key -> Some(event)
+    KeyBind(..) -> None
+    Div(children, _) | Box(children, _) ->
+      do_detect_event(state, children, input)
+    Split(splits) ->
+      case splits {
+        Split2(a:, b:, ..) ->
+          detect_event(state, Split(a), input)
+          |> option.lazy_or(fn() { detect_event(state, Split(b), input) })
+        Split1(node) -> detect_event(state, node, input)
+      }
+    Debug -> None
+  }
+}
+
+fn do_detect_event(
+  state: State(model, msg),
+  children: List(Node(msg)),
+  input: Key,
+) -> Option(msg) {
+  case children {
+    [] -> None
+    [x, ..xs] ->
+      case detect_event(state, x, input) {
+        Some(msg) -> Some(msg)
+        None -> do_detect_event(state, xs, input)
+      }
+  }
+}
+
+//
+// TASKS
+//
+
 fn task_handler(tasks: List(fn() -> msg), queue: Subject(Event(msg))) -> Nil {
   list.each(tasks, fn(task) {
     fn() { task() |> Cmd |> process.send(queue, _) }
     |> process.start(False)
   })
 }
+
+//
+// FIELD FOCUS
+//
+
+fn list_focusable(
+  children: List(Node(msg)),
+  acc: List(Focused(msg)),
+) -> List(Focused(msg)) {
+  case children {
+    [] -> acc
+    [x, ..xs] ->
+      case x {
+        Div(children, _) | Box(children, _) ->
+          list_focusable(xs, list_focusable(children, acc))
+        Input(width, label, value, event) -> {
+          let cursor = string.length(value)
+          let focused =
+            Focused(label:, value:, event:, offset: 0, cursor:, width:)
+          let offset = input_offset(cursor, focused.offset, focused.width)
+          list_focusable(xs, [Focused(..focused, offset:), ..acc])
+        }
+        _ -> list_focusable(xs, acc)
+      }
+  }
+}
+
+fn focus_next(
+  focusable: List(Focused(msg)),
+  focused: Focused(msg),
+  next: Bool,
+) -> Option(Focused(msg)) {
+  case focusable {
+    [] -> None
+    [x, ..xs] ->
+      case next {
+        True -> Some(x)
+        False -> focus_next(xs, focused, x == focused)
+      }
+  }
+}
+
+//
+// TEXT INPUT
+//
 
 fn input_handler(focused: Focused(msg), input: Key) -> Focused(msg) {
   case input {
@@ -310,7 +400,6 @@ type Control {
   FocusNext
   FocusPrev
   ModeInsert
-  //Quit
   PassInput(Key)
 }
 
@@ -321,84 +410,6 @@ fn control_event(input: Key, keybinds: Keybinds) -> Control {
     x if x == keybinds.focus_prev -> FocusPrev
     x if x == keybinds.mode_insert -> ModeInsert
     x -> PassInput(x)
-  }
-}
-
-fn list_focusable(
-  children: List(Node(msg)),
-  acc: List(Focused(msg)),
-) -> List(Focused(msg)) {
-  case children {
-    [] -> acc
-    [x, ..xs] ->
-      case x {
-        Div(children, _) | Box(children, _) ->
-          list_focusable(xs, list_focusable(children, acc))
-        Input(width, label, value, event) -> {
-          let cursor = string.length(value)
-          let focused =
-            Focused(label:, value:, event:, offset: 0, cursor:, width:)
-          let offset = input_offset(cursor, focused.offset, focused.width)
-          list_focusable(xs, [Focused(..focused, offset:), ..acc])
-        }
-        _ -> list_focusable(xs, acc)
-      }
-  }
-}
-
-fn focus_next(
-  focusable: List(Focused(msg)),
-  focused: Focused(msg),
-  next: Bool,
-) -> Option(Focused(msg)) {
-  case focusable {
-    [] -> None
-    [x, ..xs] ->
-      case next {
-        True -> Some(x)
-        False -> focus_next(xs, focused, x == focused)
-      }
-  }
-}
-
-fn detect_event(
-  state: State(model, msg),
-  node: Node(msg),
-  input: Key,
-) -> Option(msg) {
-  case node {
-    Input(_, _, _, event) -> None
-    HR | HR2(..) | BR -> None
-    Text(..) | TextMulti(..) -> None
-    Button(_, key, event) if input == key -> Some(event)
-    Button(..) -> None
-    KeyBind(key, event) if input == key -> Some(event)
-    KeyBind(..) -> None
-    Div(children, _) | Box(children, _) ->
-      do_detect_event(state, children, input)
-    Split(splits) ->
-      case splits {
-        Split2(a:, b:, ..) ->
-          detect_event(state, Split(a), input)
-          |> option.lazy_or(fn() { detect_event(state, Split(b), input) })
-        Split1(node) -> detect_event(state, node, input)
-      }
-    Debug -> None
-  }
-}
-
-fn do_detect_event(
-  state: State(model, msg),
-  children: List(Node(msg)),
-  input: Key,
-) -> Option(msg) {
-  case children {
-    [] -> None
-    [x, ..xs] ->
-      case detect_event(state, x, input) {
-        Some(msg) -> Some(msg)
-        None -> do_detect_event(state, xs, input)
-      }
   }
 }
 
@@ -695,7 +706,7 @@ type Iput {
 
 fn draw_input(btn: Iput) -> String {
   // 2 == padding of space either side
-  let colour = case btn.pressed, btn.insert {
+  let color = case btn.pressed, btn.insert {
     True, True -> Green |> Fg |> c
     True, False -> Blue |> Fg |> c
     _, _ -> White |> Fg |> c
@@ -735,7 +746,7 @@ fn draw_input(btn: Iput) -> String {
       c(Reset),
       text_trim,
       string.repeat(" ", padding),
-      colour,
+      color,
       " ",
       "│",
     ]
@@ -748,7 +759,7 @@ fn draw_input(btn: Iput) -> String {
   let start = c(Left(width)) <> c(Down(1))
   let top_right = c(Up(1 + btn.height))
   [
-    colour,
+    color,
     top(),
     start,
     middle(),
@@ -819,11 +830,11 @@ fn draw_btn(btn: Btn) -> String {
   let width = btn.width + 2
   let start = c(Left(width)) <> c(Down(1))
   let top_right = c(Up(1 + btn.height))
-  let colour = case btn.pressed {
+  let color = case btn.pressed {
     True -> Blue |> Fg |> c
     False -> White |> Fg |> c
   }
-  [colour, top(), start, middle(), start, bottom(), top_right, Reset |> c]
+  [color, top(), start, middle(), start, bottom(), top_right, Reset |> c]
   |> string.join("")
 }
 
@@ -917,6 +928,10 @@ fn c(code: TermCode) -> String {
   }
 }
 
+//
+// COLOR
+//
+
 pub type Color {
   Black
   Red
@@ -959,6 +974,15 @@ type DoNotLeak
 @external(erlang, "shell", "start_interactive")
 fn raw_ffi(opts: #(ShellOpt, ShellOpt)) -> DoNotLeak
 
+type TODO
+
+@external(erlang, "io", "rows")
+fn terminal_rows() -> Result(Int, TODO)
+
+@external(erlang, "io", "columns")
+fn terminal_columns() -> Result(Int, TODO)
+
+// TODO: probably just delete this?
 fn get_pos() -> #(Int, Int) {
   c(GetPos) |> io.print
 
@@ -978,11 +1002,3 @@ fn get_pos() -> #(Int, Int) {
     }
   }
 }
-
-type TODO
-
-@external(erlang, "io", "rows")
-fn terminal_rows() -> Result(Int, TODO)
-
-@external(erlang, "io", "columns")
-fn terminal_columns() -> Result(Int, TODO)
