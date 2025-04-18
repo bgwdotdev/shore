@@ -481,7 +481,7 @@ fn render_node(
                   Split(b),
                   last_input,
                   Pos(
-                    x: percent(pos.height, ratio.a) + 1,
+                    x: pos.x + percent(pos.height, ratio.a) + 1,
                     y: pos.y,
                     width: pos.width,
                     height: percent(pos.height, ratio.b),
@@ -512,7 +512,7 @@ fn render_node(
                   last_input,
                   Pos(
                     x: pos.x,
-                    y: percent(pos.width, ratio.a) + 1,
+                    y: pos.y + percent(pos.width, ratio.a) + 1,
                     width: percent(pos.width, ratio.b),
                     height: pos.height,
                   ),
