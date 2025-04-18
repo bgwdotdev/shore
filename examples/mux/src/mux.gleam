@@ -14,7 +14,7 @@ import shore/key
 pub fn main() {
   let exit = process.new_subject()
   let _shore =
-    shore.Spec(init:, update:, view:, exit:, keybinds: shore.default_keybinds())
+    shore.Spec(init:, update:, view:, exit:, keybinds: shore.vim_keybinds())
     |> shore.start
   process.receive_forever(exit)
 }
@@ -253,10 +253,10 @@ Keybinds:
   H -> create horizontal split
   V -> create vertical split
   D -> delete pane
-  J -> cycle input focus forward
-  K -> cycle input focus back
-  I -> insert mode
-  Esc -> normal mode
+  j -> cycle input focus forward
+  k -> cycle input focus back
+  i -> insert mode (normal mode)
+  Esc -> normal mode (insert mode)
   Enter -> submit command (normal mode)
   "
   Output(status: 0, text:, cmd: "help")

@@ -50,11 +50,22 @@ pub type Keybinds {
 
 pub fn default_keybinds() -> Keybinds {
   Keybinds(
+    exit: key.Ctrl("X"),
+    focus_clear: key.Esc,
+    focus_next: key.Tab,
+    focus_prev: key.BackTab,
+    mode_insert: key.Enter,
+    mode_normal: key.Esc,
+  )
+}
+
+pub fn vim_keybinds() -> Keybinds {
+  Keybinds(
     exit: key.Char("Q"),
     focus_clear: key.Esc,
-    focus_next: key.Char("J"),
-    focus_prev: key.Char("K"),
-    mode_insert: key.Char("I"),
+    focus_next: key.Char("j"),
+    focus_prev: key.Char("k"),
+    mode_insert: key.Char("i"),
     mode_normal: key.Esc,
   )
 }
@@ -98,7 +109,7 @@ fn shore_start(spec: Spec(model, msg)) {
           last_input: "",
           focused: None,
         )
-      let _first_paint = model |> spec.view |> render(state, _, key.Char(""))
+      let _first_paint = model |> spec.view |> render(state, _, key.Null)
       let queue =
         process.new_selector() |> process.selecting(tasks, function.identity)
       task_init |> task_handler(tasks)
@@ -134,7 +145,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       let #(model, tasks) = state.spec.update(state.model, msg)
       tasks |> task_handler(state.tasks)
       let state = State(..state, model: model)
-      state.model |> state.spec.view |> render(state, _, key.Char(""))
+      state.model |> state.spec.view |> render(state, _, key.Null)
       actor.continue(state)
     }
     KeyPress(input) -> {
