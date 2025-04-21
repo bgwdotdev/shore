@@ -152,10 +152,12 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       case state.mode {
         Normal -> {
           let ui = state.spec.view(state.model)
+
+          // check for framework key events
           let state = case control_event(input, state.spec.keybinds) {
             // TODO: decouple mode from focus clear?
-            FocusClear -> State(..state, focused: None, mode: Normal)
-            FocusPrev -> {
+            Some(FocusClear) -> State(..state, focused: None, mode: Normal)
+            Some(FocusPrev) -> {
               let focusable = list_focusable([ui], [])
               let focused = case state.focused {
                 None -> focusable |> list.first |> option.from_result
@@ -163,7 +165,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
               }
               State(..state, focused:)
             }
-            FocusNext -> {
+            Some(FocusNext) -> {
               let focusable = list_focusable([ui], []) |> list.reverse
               let focused = case state.focused {
                 None -> focusable |> list.first |> option.from_result
@@ -171,19 +173,24 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
               }
               State(..state, focused:)
             }
-            ModeInsert -> State(..state, mode: Insert)
-            PassInput(input) -> {
-              let model = case detect_event(state, ui, input) {
-                Some(msg) -> {
-                  let #(model, tasks) = state.spec.update(state.model, msg)
-                  tasks |> task_handler(state.tasks)
-                  model
-                }
-                None -> state.model
-              }
-              State(..state, model:)
-            }
+            Some(ModeInsert) -> State(..state, mode: Insert)
+            None -> state
           }
+
+          // pass the key event onto the application as well
+          let state = {
+            let model = case detect_event(state, ui, input) {
+              Some(msg) -> {
+                let #(model, tasks) = state.spec.update(state.model, msg)
+                tasks |> task_handler(state.tasks)
+                model
+              }
+              None -> state.model
+            }
+            State(..state, model:)
+          }
+
+          // render
           state.model |> state.spec.view |> render(state, _, input)
           actor.continue(state)
         }
@@ -426,16 +433,15 @@ type Control {
   FocusNext
   FocusPrev
   ModeInsert
-  PassInput(Key)
 }
 
-fn control_event(input: Key, keybinds: Keybinds) -> Control {
+fn control_event(input: Key, keybinds: Keybinds) -> Option(Control) {
   case input {
-    x if x == keybinds.focus_clear -> FocusClear
-    x if x == keybinds.focus_next -> FocusNext
-    x if x == keybinds.focus_prev -> FocusPrev
-    x if x == keybinds.mode_insert -> ModeInsert
-    x -> PassInput(x)
+    x if x == keybinds.focus_clear -> FocusClear |> Some
+    x if x == keybinds.focus_next -> FocusNext |> Some
+    x if x == keybinds.focus_prev -> FocusPrev |> Some
+    x if x == keybinds.mode_insert -> ModeInsert |> Some
+    _ -> None
   }
 }
 
