@@ -230,7 +230,7 @@ fn detect_event(
 ) -> Option(msg) {
   case node {
     Input(..) -> None
-    HR | HR2(..) | Bar(..) | BR -> None
+    HR | HR2(..) | Bar(..) | BR | Progress(..) -> None
     Text(..) | TextMulti(..) -> None
     Button(_, key, event) if input == key -> Some(event)
     Button(..) -> None
@@ -629,6 +629,8 @@ fn render_node(
       |> string.join("")
       |> Some
     BR -> "\n" |> Some
+    Progress(width:, max:, value:, color:) ->
+      draw_progress(width:, max:, value:, color:) |> Some
   }
 }
 
@@ -724,6 +726,8 @@ pub type Node(msg) {
   /// TODO: document
   Split(Splits(msg))
   Debug
+  // progress bar
+  Progress(width: Int, max: Int, value: Int, color: Color)
 }
 
 /// TODO
@@ -937,6 +941,27 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
     c(LoadPos),
     c(Right(2)),
     c(SavePos),
+  ]
+  |> string.join("")
+}
+
+fn draw_progress(
+  width width: Int,
+  max max: Int,
+  value value: Int,
+  color color: Color,
+) -> String {
+  let progress = value * 100 / max
+  let complete = progress * width / 100 |> int.min(width)
+  let rest = width - complete
+  [
+    c(SavePos),
+    c(Reset),
+    c(Fg(color)),
+    string.repeat("█", complete),
+    c(Reset),
+    string.repeat("░", rest),
+    c(LoadPos),
   ]
   |> string.join("")
 }
