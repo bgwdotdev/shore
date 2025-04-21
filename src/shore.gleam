@@ -488,20 +488,23 @@ fn render_node(
                   Pos(
                     ..pos,
                     width: pos.width,
-                    height: percent(pos.height, ratio.a),
+                    height: calc_ratio(pos.height, ratio.a, ratio.b),
                   ),
                 ),
-                c(SetPos(pos.x + 1 + percent(pos.height, ratio.a), pos.y))
+                c(SetPos(
+                  pos.x + 1 + calc_ratio(pos.height, ratio.a, ratio.b),
+                  pos.y,
+                ))
                   |> Some,
                 render_node(
                   state,
                   Split(b),
                   last_input,
                   Pos(
-                    x: pos.x + percent(pos.height, ratio.a) + 1,
+                    x: pos.x + 1 + calc_ratio(pos.height, ratio.a, ratio.b),
                     y: pos.y,
                     width: pos.width,
-                    height: percent(pos.height, ratio.b),
+                    height: calc_ratio(pos.height, ratio.b, ratio.a),
                   ),
                 ),
               ]
@@ -517,11 +520,14 @@ fn render_node(
                   last_input,
                   Pos(
                     ..pos,
-                    width: percent(pos.width, ratio.a),
+                    width: calc_ratio(pos.width, ratio.a, ratio.b),
                     height: pos.height,
                   ),
                 ),
-                c(SetPos(pos.x, pos.y + 1 + percent(pos.width, ratio.a)))
+                c(SetPos(
+                  pos.x,
+                  pos.y + 1 + calc_ratio(pos.width, ratio.a, ratio.b),
+                ))
                   |> Some,
                 render_node(
                   state,
@@ -529,8 +535,8 @@ fn render_node(
                   last_input,
                   Pos(
                     x: pos.x,
-                    y: pos.y + percent(pos.width, ratio.a) + 1,
-                    width: percent(pos.width, ratio.b),
+                    y: pos.y + calc_ratio(pos.width, ratio.a, ratio.b) + 1,
+                    width: calc_ratio(pos.width, ratio.b, ratio.a),
                     height: pos.height,
                   ),
                 ),
@@ -647,8 +653,18 @@ fn sep(separator: Separator) -> String {
   }
 }
 
-fn percent(x: Int, r: Int) -> Int {
-  x * r / 100
+fn calc_ratio(of x: Int, for a: Ratio, minus b: Ratio) -> Int {
+  case a {
+    Px(y) -> y
+    Pct(y) -> x * y / 100
+    Fill ->
+      x
+      - case b {
+        Px(y) -> y
+        Pct(y) -> x * y / 100
+        Fill -> x * 50 / 100
+      }
+  }
 }
 
 //
@@ -717,7 +733,13 @@ pub type Splits(msg) {
 }
 
 pub type Ratio2 {
-  Ratio2(a: Int, b: Int)
+  Ratio2(a: Ratio, b: Ratio)
+}
+
+pub type Ratio {
+  Px(Int)
+  Pct(Int)
+  Fill
 }
 
 pub type Direction {
