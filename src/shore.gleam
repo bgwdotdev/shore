@@ -229,8 +229,8 @@ fn detect_event(
   input: Key,
 ) -> Option(msg) {
   case node {
-    Input(event:, ..) -> None
-    HR | HR2(..) | BR -> None
+    Input(..) -> None
+    HR | HR2(..) | Bar(..) | BR -> None
     Text(..) | TextMulti(..) -> None
     Button(_, key, event) if input == key -> Some(event)
     Button(..) -> None
@@ -611,6 +611,17 @@ fn render_node(
     HR -> string.repeat("─", pos.width) |> Some
     HR2(color) ->
       { c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) } |> Some
+    Bar(color) ->
+      [
+        c(SavePos),
+        c(Reset),
+        c(Bg(color)),
+        string.repeat(" ", pos.width),
+        c(Reset),
+        c(LoadPos),
+      ]
+      |> string.join("")
+      |> Some
     BR -> "\n" |> Some
   }
 }
@@ -678,6 +689,8 @@ pub type Node(msg) {
   /// A horizontal line
   HR
   HR2(color: Color)
+  /// A row with a background color
+  Bar(color: Color)
   /// An empty line
   BR
   /// A text string
@@ -692,7 +705,7 @@ pub type Node(msg) {
   Div(children: List(Node(msg)), separator: Separator)
   /// A box container element for holding other nodes
   Box(children: List(Node(msg)), title: Option(String))
-  ///
+  /// TODO: document
   Split(Splits(msg))
   Debug
 }
