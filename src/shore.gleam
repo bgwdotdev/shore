@@ -988,6 +988,7 @@ type TermCode {
   Column(Int)
   Fg(Color)
   Bg(Color)
+  SGR(Graphic)
   Reset
   GetPos
   AltBuffer
@@ -1016,12 +1017,33 @@ fn c(code: TermCode) -> String {
     Column(i) -> esc <> "[" <> int.to_string(i) <> "G"
     Fg(color) -> esc <> "[3" <> col(color) <> "m"
     Bg(color) -> esc <> "[4" <> col(color) <> "m"
+    SGR(graphic) -> esc <> "[" <> graphic_to_string(graphic) <> "m"
     Reset -> esc <> "[0m"
     GetPos -> esc <> "[6n"
     AltBuffer -> esc <> "[?1049h"
     MainBuffer -> esc <> "[?1049l"
     BSU -> esc <> "[?2026h"
     ESU -> esc <> "[?2026l"
+  }
+}
+
+//
+// GRAPHIC
+//
+
+pub type Graphic {
+  Bold
+  Faint
+  Italic
+  Underline
+}
+
+fn graphic_to_string(graphic: Graphic) -> String {
+  case graphic {
+    Bold -> "1"
+    Faint -> "2"
+    Italic -> "3"
+    Underline -> "4"
   }
 }
 
