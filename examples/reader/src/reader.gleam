@@ -190,7 +190,7 @@ fn view(model: Model) -> shore.Node(Msg) {
     [] -> {
       shore.Split(shore.Split2(
         shore.Horizontal,
-        shore.Ratio2(2, 98),
+        shore.Ratio2(shore.Px(3), shore.Fill),
         shore.Split1(shore.Div(
           [
             shore.KeyBind(key.Char("k"), Up),
@@ -208,7 +208,7 @@ fn view(model: Model) -> shore.Node(Msg) {
         )),
         shore.Split2(
           shore.Vertical,
-          shore.Ratio2(50, 50),
+          shore.Ratio2(shore.Pct(30), shore.Fill),
           shore.Split1(shore.Box(
             model.files
               |> sort_files

@@ -13,7 +13,7 @@ pub fn main() {
   let ui =
     shore.Spec(init:, view:, update:, exit:, keybinds: shore.default_keybinds())
     |> shore.start
-  tick(ui)
+  //tick(ui)
   process.receive_forever(exit)
 }
 
@@ -26,13 +26,20 @@ fn tick(ui: process.Subject(shore.Event(Msg))) {
 // MODEL 
 
 type Model {
-  Model(counter: Int, hi: String, bye: String)
+  Model(counter: Int, hi: String, bye: String, csv: List(List(String)))
 }
 
 fn init() -> #(Model, List(fn() -> Msg)) {
+  let csv = [
+    ["name", "age", "date"],
+    ["bob", "20", "2025-01-01"],
+    ["alice the quick brown fox", "30", "2025-03-04"],
+    ["jane", "54", "2024-10-10"],
+    ["phil", "33", "2025-02-11"],
+  ]
   let model =
-    Model(counter: 0, hi: "abcdefghijklmnopqrstuvwxyz", bye: "abcdarsd")
-  #(model, [fn() { Set(10) }])
+    Model(counter: 0, hi: "abcdefghijklmnopqrstuvwxyz", bye: "abcdarsd", csv:)
+  #(model, [])
 }
 
 // UPDATE
@@ -68,6 +75,25 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
+  shore.Split(shore.Split2(
+    shore.Vertical,
+    shore.Ratio2(shore.Pct(50), shore.Pct(50)),
+    shore.Split1(view_a(model)),
+    shore.Split2(
+      shore.Vertical,
+      shore.Ratio2(shore.Pct(50), shore.Pct(50)),
+      shore.Split1(shore.Text(" ", None, Some(shore.Cyan))),
+      shore.Split2(
+        shore.Vertical,
+        shore.Ratio2(shore.Pct(50), shore.Pct(50)),
+        shore.Split1(shore.Text(" ", None, Some(shore.Red))),
+        shore.Split1(shore.Text(" ", None, Some(shore.Green))),
+      ),
+    ),
+  ))
+}
+
+fn view_a(model: Model) -> shore.Node(Msg) {
   shore.Div(
     [
       "HELLO WORLD" |> shore.Text(None, None),
@@ -82,7 +108,10 @@ fn view(model: Model) -> shore.Node(Msg) {
       shore.BR,
       model.bye |> shore.Text(None, None),
       shore.BR,
-      shore.Input("try", "", shore.Fixed(20), FixMe, shore.Border),
+      shore.Table(50, model.csv),
+      shore.BR,
+      shore.BR,
+      shore.Progress(20, 100, model.counter, shore.Blue),
       shore.BR,
       shore.BR,
       model.counter |> int.to_string |> shore.Text(Some(shore.Black), None),

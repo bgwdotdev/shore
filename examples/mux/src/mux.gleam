@@ -153,7 +153,7 @@ fn update_term_cmd(
 fn view(model: Model) -> shore.Node(Msg) {
   shore.Split(shore.Split2(
     shore.Horizontal,
-    shore.Ratio2(1, 100),
+    shore.Ratio2(shore.Px(1), shore.Pct(100)),
     shore.Split1(view_keybinds(model)),
     shore.Split1(shore.Split(view_term(model.term))),
   ))
@@ -179,8 +179,16 @@ fn view_keybinds(model: Model) -> shore.Node(Msg) {
 
 fn view_term(term: Term) -> shore.Splits(Msg) {
   let #(size, other, split) = case term.term {
-    Some(term) -> #(shore.Ratio2(50, 50), view_term(term), term.split)
-    None -> #(shore.Ratio2(100, 10), view_none(), shore.Horizontal)
+    Some(term) -> #(
+      shore.Ratio2(shore.Pct(50), shore.Pct(50)),
+      view_term(term),
+      term.split,
+    )
+    None -> #(
+      shore.Ratio2(shore.Pct(100), shore.Pct(10)),
+      view_none(),
+      shore.Horizontal,
+    )
   }
   shore.Split2(split, size, shore.Split1(view_term_output(term)), other)
 }
