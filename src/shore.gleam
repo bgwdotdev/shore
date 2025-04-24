@@ -230,7 +230,7 @@ fn detect_event(
 ) -> Option(msg) {
   case node {
     Input(..) -> None
-    HR | HR2(..) | Bar(..) | BR | Progress(..) -> None
+    HR | HR2(..) | Bar(..) | BR | Progress(..) | Table(..) -> None
     Text(..) | TextMulti(..) -> None
     Button(_, key, event) if input == key -> Some(event)
     Button(..) -> None
@@ -562,6 +562,8 @@ fn render_node(
       |> string.join(sep(In))
       |> Some
     }
+    Table(width:, table:) ->
+      draw_table(int.min(width, pos.width), table) |> Some
     Button(text, input, _) ->
       draw_btn(Btn(10, 1, "", text, last_input == input)) |> Some
     KeyBind(..) -> None
@@ -723,6 +725,8 @@ pub type Node(msg) {
   Div(children: List(Node(msg)), separator: Separator)
   /// A box container element for holding other nodes
   Box(children: List(Node(msg)), title: Option(String))
+  /// A table layout
+  Table(width: Int, table: List(List(String)))
   /// TODO: document
   Split(Splits(msg))
   Debug
@@ -963,6 +967,56 @@ fn draw_progress(
     string.repeat("░", rest),
     c(LoadPos),
   ]
+  |> string.join("")
+}
+
+type TableAttr {
+  TableAttr(
+    width: Int,
+    col_count: Int,
+    row_count: Int,
+    col_width: Int,
+    row_height: Int,
+  )
+}
+
+fn draw_table(width: Int, values: List(List(String))) -> String {
+  let col_count =
+    values |> list.first |> result.map(list.length) |> result.unwrap(1)
+  let col_width = { width - 2 } / col_count
+  let col_left_over = width - col_width * col_count
+  let row_count = values |> list.length
+  let row_height = 1
+  let table = TableAttr(width:, col_count:, col_width:, row_count:, row_height:)
+
+  let top = ["╭", string.repeat("─", table.width), "╮"] |> string.join("")
+  let start = c(Left(width + 2)) <> c(Down(1))
+  let row = fn(row, idx) {
+    list.map(row, fn(col) {
+      case string.length(col) {
+        x if x >= col_width -> string.slice(col, 0, col_width - 3) <> ".. "
+        x -> col <> c(Right(col_width - x))
+      }
+    })
+    |> string.join("")
+    |> fn(row) {
+      case idx {
+        0 ->
+          "│"
+          <> c(SGR(Bold))
+          <> c(Fg(Blue))
+          <> row
+          <> c(Reset)
+          <> c(Right(col_left_over))
+          <> "│"
+          <> start
+        _ -> "│" <> row <> c(Right(col_left_over)) <> "│" <> start
+      }
+    }
+  }
+  let rows = values |> list.index_map(row) |> string.join("")
+  let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
+  [c(Reset), top, start, rows, bottom, start]
   |> string.join("")
 }
 
