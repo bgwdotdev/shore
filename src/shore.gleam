@@ -86,12 +86,13 @@ type Mode {
   Normal
 }
 
-pub fn start(spec: Spec(model, msg)) -> Subject(Event(msg)) {
+pub fn start(
+  spec: Spec(model, msg),
+) -> Result(Subject(Event(msg)), actor.StartError) {
   raw_erl()
-  // TODO: set this and fix exit
   { c(HideCursor) <> c(AltBuffer) } |> io.print
-  let assert Ok(shore) = shore_start(spec)
-  process.start(fn() { read_input(shore, spec.keybinds.exit) }, False)
+  use shore <- result.map(shore_start(spec))
+  process.start(fn() { read_input(shore, spec.keybinds.exit) }, True)
   shore
 }
 
