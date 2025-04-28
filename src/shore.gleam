@@ -23,6 +23,7 @@ pub type Spec(model, msg) {
     update: fn(model, msg) -> #(model, List(fn() -> msg)),
     exit: process.Subject(Nil),
     keybinds: Keybinds,
+    redraw: Redraw,
   )
 }
 
@@ -93,6 +94,7 @@ pub fn start(
   { c(HideCursor) <> c(AltBuffer) } |> io.print
   use shore <- result.map(shore_start(spec))
   process.start(fn() { read_input(shore, spec.keybinds.exit) }, True)
+  redraw_on_timer(spec, shore)
   shore
 }
 
@@ -129,6 +131,7 @@ fn shore_start(spec: Spec(model, msg)) {
 pub opaque type Event(msg) {
   KeyPress(Key)
   Cmd(msg)
+  Redraw
   Exit
 }
 
@@ -146,7 +149,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       let #(model, tasks) = state.spec.update(state.model, msg)
       tasks |> task_handler(state.tasks)
       let state = State(..state, model: model)
-      state.model |> state.spec.view |> render(state, _, key.Null)
+      redraw_on_update(state, key.Null)
       actor.continue(state)
     }
     KeyPress(input) -> {
@@ -192,7 +195,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
           }
 
           // render
-          state.model |> state.spec.view |> render(state, _, input)
+          redraw_on_update(state, input)
           actor.continue(state)
         }
         Insert -> {
@@ -211,10 +214,14 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
             x -> #(x, state.model)
           }
           let state = State(..state, focused:, mode:, model:)
-          state.model |> state.spec.view |> render(state, _, input)
+          redraw_on_update(state, input)
           actor.continue(state)
         }
       }
+    }
+    Redraw -> {
+      redraw(state, key.Null)
+      actor.continue(state)
     }
     Exit -> {
       { c(ShowCursor) <> c(MainBuffer) } |> io.print
@@ -262,6 +269,48 @@ fn do_detect_event(
         Some(msg) -> Some(msg)
         None -> do_detect_event(state, xs, input)
       }
+  }
+}
+
+//
+// REDRAW
+//
+
+/// configures the behaviour which causes the ui to be redrawn
+pub type Redraw {
+  /// whenever a new event happens, the ui will update
+  /// suitable for infrequently changing state
+  OnUpdate
+  /// every x milliseconds, trigger a redraw
+  /// 17 for 60fps
+  /// 33 for 30fps
+  OnTimer(Int)
+}
+
+fn redraw_on_timer(spec: Spec(model, msg), shore: Subject(Event(msg))) {
+  case spec.redraw {
+    OnUpdate -> Nil
+    OnTimer(x) -> {
+      process.start(fn() { do_redraw_on_timer(shore, x) }, True)
+      Nil
+    }
+  }
+}
+
+fn do_redraw_on_timer(shore: Subject(Event(msg)), x: Int) -> Nil {
+  process.send(shore, Redraw)
+  process.sleep(x)
+  do_redraw_on_timer(shore, x)
+}
+
+fn redraw(state: State(model, msg), input: Key) -> Nil {
+  state.model |> state.spec.view |> render(state, _, input)
+}
+
+fn redraw_on_update(state: State(model, msg), input: Key) -> Nil {
+  case state.spec.redraw {
+    OnUpdate -> redraw(state, input)
+    OnTimer(_) -> Nil
   }
 }
 
