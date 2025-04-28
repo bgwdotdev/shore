@@ -600,6 +600,7 @@ fn render_node(
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
+      |> list.prepend(c(SavePos))
       |> string.join(sep(separator))
       |> Some
     Box(children, title) -> {
@@ -702,8 +703,7 @@ fn text_to_multi(text: String, width: Int, height: Int) -> String {
 fn sep(separator: Separator) -> String {
   case separator {
     Row -> c(Right(1))
-    Col -> c(Down(1)) <> c(StartLine)
-    In -> c(LoadPos) <> c(Down(1)) <> c(SavePos)
+    Col | In -> c(LoadPos) <> c(Down(1)) <> c(SavePos)
   }
 }
 
