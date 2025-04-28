@@ -960,13 +960,11 @@ fn draw_progress(
   let complete = progress * width / 100 |> int.min(width)
   let rest = width - complete
   [
-    c(SavePos),
     c(Reset),
     c(Fg(color)),
     string.repeat("█", complete),
     c(Reset),
     string.repeat("░", rest),
-    c(LoadPos),
   ]
   |> string.join("")
 }
