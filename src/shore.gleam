@@ -240,7 +240,7 @@ fn detect_event(
     Input(..) -> None
     HR | HR2(..) | Bar(..) | BR | Progress(..) | Table(..) -> None
     Text(..) | TextMulti(..) -> None
-    Button(_, key, event) if input == key -> Some(event)
+    Button(key:, event:, ..) if input == key -> Some(event)
     Button(..) -> None
     KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
@@ -725,16 +725,10 @@ fn calc_ratio(of x: Int, for a: Ratio, minus b: Ratio) -> Int {
 // READ INPUT
 //
 
-@external(erlang, "io", "get_line")
-fn get_line(prompt: String) -> Charlist
-
 @external(erlang, "io", "get_chars")
 fn get_chars(prompt: String, count: Int) -> String
 
 fn read_input(shore: Subject(Event(msg)), exit: Key) -> Nil {
-  // TODO: this seems to solve issues with key seuqences but:
-  // a) is 10 long enough for expected key codes
-  // b) is it possible to have character merges if you press two keys quickly enough?
   let key = get_chars("", 10) |> key.from_string
   case key == exit {
     True -> Exit |> process.send(shore, _)
@@ -926,45 +920,12 @@ fn map_cursor(str: String, cursor: Int, width: Int) -> String {
 }
 
 fn draw_btn(btn: Btn) -> String {
-  let padding = { btn.width - string.length(btn.text) |> int.to_float } /. 2.0
-  let odd = case float.modulo(padding, 2.0) {
-    Ok(0.0) -> 0
-    Ok(1.0) -> 0
-    Ok(_) -> 1
-    _ -> 0
+  let button = "  " <> btn.text <> "  "
+  let bg = case btn.pressed {
+    False -> Blue |> Bg |> c
+    True -> Green |> Bg |> c
   }
-  let padl = float.truncate(padding)
-  let padr = float.truncate(padding) + odd
-  let top = case string.length(btn.title) {
-    0 -> fn() { ["╭", string.repeat("─", btn.width), "╮"] |> string.join("") }
-    _ -> fn() {
-      [
-        "╭",
-        "─",
-        " ",
-        btn.title,
-        " ",
-        string.repeat("─", btn.width - 3 - string.length(btn.title)),
-        "╮",
-      ]
-      |> string.join("")
-    }
-  }
-  let middle = fn() {
-    ["│", string.repeat(" ", padl), btn.text, string.repeat(" ", padr), "│"]
-    |> string.join("")
-  }
-  let bottom = fn() {
-    ["╰", string.repeat("─", btn.width), "╯"] |> string.join("")
-  }
-  let width = btn.width + 2
-  let start = c(Left(width)) <> c(Down(1))
-  let top_right = c(Up(1 + btn.height))
-  let color = case btn.pressed {
-    True -> Blue |> Fg |> c
-    False -> White |> Fg |> c
-  }
-  [color, top(), start, middle(), start, bottom(), top_right, Reset |> c]
+  [bg, c(Fg(Black)), button, c(Reset)]
   |> string.join("")
 }
 
@@ -1202,24 +1163,3 @@ fn terminal_rows() -> Result(Int, TODO)
 
 @external(erlang, "io", "columns")
 fn terminal_columns() -> Result(Int, TODO)
-
-// TODO: probably just delete this?
-fn get_pos() -> #(Int, Int) {
-  c(GetPos) |> io.print
-
-  get_line("")
-  |> charlist.to_string()
-  |> string.drop_start(2)
-  |> string.drop_end(1)
-  |> string.split(";")
-  |> list.map(int.parse)
-  |> fn(i) {
-    case i {
-      [Ok(a), Ok(b)] -> #(a, b) |> echo
-      fixme -> {
-        fixme |> echo
-        #(-1, -1)
-      }
-    }
-  }
-}
