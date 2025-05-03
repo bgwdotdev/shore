@@ -11,7 +11,14 @@ import shore/key
 pub fn main() {
   let exit = process.new_subject()
   let ui =
-    shore.Spec(init:, view:, update:, exit:, keybinds: shore.default_keybinds())
+    shore.Spec(
+      init:,
+      view:,
+      update:,
+      exit:,
+      keybinds: shore.default_keybinds(),
+      redraw: shore.OnTimer(17),
+    )
     |> shore.start
   //tick(ui)
   process.receive_forever(exit)

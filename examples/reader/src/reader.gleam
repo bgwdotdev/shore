@@ -14,7 +14,14 @@ import simplifile
 pub fn main() {
   let exit = process.new_subject()
   let _ =
-    shore.Spec(init:, update:, view:, exit:, keybinds: shore.default_keybinds())
+    shore.Spec(
+      init:,
+      update:,
+      view:,
+      exit:,
+      keybinds: shore.default_keybinds(),
+      redraw: shore.OnTimer(17),
+    )
     |> shore.start
   process.receive_forever(exit)
 }

@@ -14,7 +14,14 @@ import shore/key
 pub fn main() {
   let exit = process.new_subject()
   let _shore =
-    shore.Spec(init:, update:, view:, exit:, keybinds: shore.vim_keybinds())
+    shore.Spec(
+      init:,
+      update:,
+      view:,
+      exit:,
+      keybinds: shore.vim_keybinds(),
+      redraw: shore.OnTimer(17),
+    )
     |> shore.start
   process.receive_forever(exit)
 }
