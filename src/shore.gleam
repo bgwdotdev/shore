@@ -13,6 +13,69 @@ import gleam/string
 import shore/key.{type Key}
 
 //
+// LAYOUT
+//
+
+pub type Layout(msg) {
+  Grid(rows: List(Ratio), columns: List(Ratio), cells: List(Cell(msg)))
+}
+
+pub type Cell(msg) {
+  Cell(content: fn() -> Node(msg), row: #(Int, Int), col: #(Int, Int))
+}
+
+pub fn layout(layout: Layout(msg), width: Int, height: Int) {
+  let col_sizes = layout.columns |> calc_sizes(width, _)
+  let row_sizes = layout.rows |> calc_sizes(height, _)
+  layout.cells
+  |> list.map(fn(cell) {
+    let #(x, w) = calc_cell_size(cell.col.0, cell.col.1, col_sizes)
+    let #(y, h) = calc_cell_size(cell.row.0, cell.row.1, row_sizes)
+    #(cell.content, Pos(x:, y:, width: w, height: h))
+  })
+}
+
+fn calc_cell_size(from: Int, to: Int, of: List(Int)) {
+  let margin = 2
+  list.index_fold(of, #(0, 0), fn(acc, item, idx) {
+    case idx {
+      x if x >= from && x <= to -> #(acc.0, acc.1 + item)
+      x if x == from - 1 -> #(acc.0 + margin + item, acc.1 - margin / 2)
+      x if x < from -> #(acc.0 + item, acc.1)
+      _ -> acc
+    }
+  })
+}
+
+fn calc_sizes(max: Int, sizes: List(Ratio)) {
+  let first =
+    list.map(sizes, fn(size) {
+      case size {
+        Px(px) -> Some(px)
+        Pct(pct) -> Some(max * pct / 100)
+        Fill -> None
+      }
+    })
+  let total_known_size =
+    list.fold(first, 0, fn(acc, i) {
+      case i {
+        Some(px) -> acc + px
+        None -> acc
+      }
+    })
+  let total_unknown_count = first |> list.filter(option.is_none) |> list.length
+  let remainder = { max - total_known_size } / total_unknown_count
+  let second =
+    list.map(first, fn(size) {
+      case size {
+        Some(px) -> px
+        None -> remainder
+      }
+    })
+  second
+}
+
+//
 // INIT
 //
 
@@ -253,6 +316,8 @@ fn detect_event(
           |> option.lazy_or(fn() { detect_event(state, Split(b), input) })
         Split1(node) -> detect_event(state, node, input)
       }
+    Layouts(layout) -> None
+    // TODO: implement this NOW
     Debug -> None
   }
 }
@@ -499,7 +564,8 @@ fn control_event(input: Key, keybinds: Keybinds) -> Option(Control) {
 // RENDER
 //
 
-type Pos {
+// TODO: unpublic
+pub type Pos {
   Pos(x: Int, y: Int, width: Int, height: Int)
 }
 
@@ -523,6 +589,17 @@ fn render_node(
   pos: Pos,
 ) -> Option(String) {
   case node {
+    Layouts(l) -> {
+      layout(l, pos.width, pos.height)
+      |> list.map(fn(i) {
+        let cursor = c(SetPos({ i.1 }.y, { i.1 }.x))
+        render_node(state, i.0(), last_input, i.1)
+        |> option.map(fn(r) { cursor <> r })
+      })
+      |> option.values
+      |> string.join("")
+      |> Some
+    }
     Split(splits) ->
       case splits {
         Split1(node) -> render_node(state, node, last_input, pos)
@@ -600,8 +677,8 @@ fn render_node(
     Div(children, separator) ->
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
-      |> list.prepend(c(SavePos))
       |> string.join(sep(separator))
+      |> string.append(c(SavePos), _)
       |> Some
     Box(children, title) -> {
       let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
@@ -776,6 +853,8 @@ pub type Node(msg) {
   Debug
   // progress bar
   Progress(width: Int, max: Int, value: Int, color: Color)
+  // TODO
+  Layouts(layout: Layout(msg))
 }
 
 /// TODO
