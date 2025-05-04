@@ -17,7 +17,12 @@ import shore/key.{type Key}
 //
 
 pub type Layout(msg) {
-  Grid(rows: List(Ratio), columns: List(Ratio), cells: List(Cell(msg)))
+  Grid(
+    gap: Int,
+    rows: List(Ratio),
+    columns: List(Ratio),
+    cells: List(Cell(msg)),
+  )
 }
 
 pub type Cell(msg) {
@@ -29,18 +34,17 @@ pub fn layout(layout: Layout(msg), width: Int, height: Int) {
   let row_sizes = layout.rows |> calc_sizes(height, _)
   layout.cells
   |> list.map(fn(cell) {
-    let #(x, w) = calc_cell_size(cell.col.0, cell.col.1, col_sizes)
-    let #(y, h) = calc_cell_size(cell.row.0, cell.row.1, row_sizes)
+    let #(x, w) = calc_cell_size(layout.gap, cell.col.0, cell.col.1, col_sizes)
+    let #(y, h) = calc_cell_size(layout.gap, cell.row.0, cell.row.1, row_sizes)
     #(cell.content, Pos(x:, y:, width: w, height: h))
   })
 }
 
-fn calc_cell_size(from: Int, to: Int, of: List(Int)) {
-  let margin = 2
-  list.index_fold(of, #(0, 0), fn(acc, item, idx) {
+fn calc_cell_size(gap: Int, from: Int, to: Int, of: List(Int)) {
+  list.index_fold(of, #(1, 0), fn(acc, item, idx) {
     case idx {
       x if x >= from && x <= to -> #(acc.0, acc.1 + item)
-      x if x == from - 1 -> #(acc.0 + margin + item, acc.1 - margin / 2)
+      x if x == from - 1 -> #(acc.0 + gap + item, acc.1 - gap)
       x if x < from -> #(acc.0 + item, acc.1)
       _ -> acc
     }
@@ -64,15 +68,29 @@ fn calc_sizes(max: Int, sizes: List(Ratio)) {
       }
     })
   let total_unknown_count = first |> list.filter(option.is_none) |> list.length
-  let remainder = { max - total_known_size } / total_unknown_count
-  let second =
-    list.map(first, fn(size) {
-      case size {
-        Some(px) -> px
-        None -> remainder
+  let remainder = max - total_known_size
+  let remainder_split = remainder / total_unknown_count
+  let round_up = remainder - remainder_split * total_unknown_count
+  do_calc_sizes(first, remainder_split, round_up, [])
+}
+
+fn do_calc_sizes(
+  sizes: List(Option(Int)),
+  remainder_split: Int,
+  round_up: Int,
+  acc: List(Int),
+) -> List(Int) {
+  case sizes {
+    [] -> list.reverse(acc)
+    [x, ..xs] ->
+      case x {
+        Some(px) ->
+          [px, ..acc] |> do_calc_sizes(xs, remainder_split, round_up, _)
+        None ->
+          [remainder_split + round_up, ..acc]
+          |> do_calc_sizes(xs, remainder_split, 0, _)
       }
-    })
-  second
+  }
 }
 
 //
@@ -681,9 +699,9 @@ fn render_node(
       |> string.append(c(SavePos), _)
       |> Some
     Box(children, title) -> {
-      let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
+      let pos = Pos(..pos, width: pos.width - 3, height: pos.height - 2)
       [
-        draw_box(pos.width, pos.height + 1, title),
+        draw_box(int.max(pos.width, 1), int.max(pos.height, 1), title),
         ..list.map(children, render_node(state, _, last_input, pos))
         |> option.values
       ]
