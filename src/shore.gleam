@@ -260,6 +260,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       let #(model, tasks) = state.spec.update(state.model, msg)
       tasks |> task_handler(state.tasks)
       let state = State(..state, model: model)
+      let state = update_viewport(state)
       redraw_on_update(state, key.Null)
       actor.continue(state)
     }
@@ -306,6 +307,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
           }
 
           // render
+          let state = update_viewport(state)
           redraw_on_update(state, input)
           actor.continue(state)
         }
@@ -325,12 +327,14 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
             x -> #(x, state.model)
           }
           let state = State(..state, focused:, mode:, model:)
+          let state = update_viewport(state)
           redraw_on_update(state, input)
           actor.continue(state)
         }
       }
     }
     Redraw -> {
+      let state = update_viewport(state)
       redraw(state, key.Null)
       actor.continue(state)
     }
@@ -340,6 +344,12 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       actor.Stop(process.Normal)
     }
   }
+}
+
+fn update_viewport(state: State(model, msg)) -> State(model, msg) {
+  let assert Ok(width) = terminal_columns()
+  let assert Ok(height) = terminal_rows()
+  State(..state, width:, height:)
 }
 
 // TDOO: fix to be tail call recursive?
@@ -639,9 +649,7 @@ pub type Pos {
 }
 
 fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
-  let assert Ok(width) = terminal_columns() as "failed to get terminal size"
-  let assert Ok(height) = terminal_rows() as "failed to get terminal size"
-  let pos = Pos(0, 0, width, height)
+  let pos = Pos(0, 0, state.width, state.height)
   c(BSU) |> io.print
   {
     c(Clear)
