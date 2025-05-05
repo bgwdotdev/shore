@@ -12,6 +12,10 @@ import gleam/result
 import gleam/string
 import shore/key.{type Key}
 
+pub fn main() {
+  io.print(c(MoveRight(0)) <> "a")
+}
+
 //
 // LAYOUT
 //
@@ -29,7 +33,7 @@ pub type Cell(msg) {
   Cell(content: Node(msg), row: #(Int, Int), col: #(Int, Int))
 }
 
-fn layout(
+pub fn layout(
   layout: Layout(msg),
   width: Int,
   height: Int,
@@ -40,7 +44,7 @@ fn layout(
   |> list.map(fn(cell) {
     let #(x, w) = calc_cell_size(layout.gap, cell.col.0, cell.col.1, col_sizes)
     let #(y, h) = calc_cell_size(layout.gap, cell.row.0, cell.row.1, row_sizes)
-    #(cell.content, Pos(x:, y:, width: w, height: h))
+    #(cell.content, Pos(x:, y:, width: w, height: h, align: Left))
   })
 }
 
@@ -362,12 +366,12 @@ fn detect_event(
   case node {
     Input(..) -> None
     HR | HR2(..) | Bar(..) | BR | Progress(..) | Table(..) -> None
-    Text(..) | TextMulti(..) -> None
+    Text(..) | TextAlign(..) | TextMulti(..) -> None
     Button(key:, event:, ..) if input == key -> Some(event)
     Button(..) -> None
     KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
-    Div(children, _) | Box(children, _) ->
+    Div(children, _) | DivRow(children) | Box(children, _) ->
       do_detect_event(state, children, input)
     Split(splits) ->
       case splits {
@@ -462,7 +466,7 @@ fn list_focusable(
   children: List(Node(msg)),
   state: State(model, msg),
 ) -> List(Focused(msg)) {
-  let pos = Pos(0, 0, state.width, state.height)
+  let pos = Pos(0, 0, state.width, state.height, Left)
   do_list_focusable(pos, children, [])
 }
 
@@ -646,11 +650,11 @@ fn control_event(input: Key, keybinds: Keybinds) -> Option(Control) {
 
 // TODO: unpublic
 pub type Pos {
-  Pos(x: Int, y: Int, width: Int, height: Int)
+  Pos(x: Int, y: Int, width: Int, height: Int, align: Align)
 }
 
 fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
-  let pos = Pos(0, 0, state.width, state.height)
+  let pos = Pos(0, 0, state.width, state.height, Left)
   c(BSU) |> io.print
   {
     c(Clear)
@@ -706,6 +710,7 @@ fn render_node(
                   Split(b),
                   last_input,
                   Pos(
+                    ..pos,
                     x: pos.x + 1 + calc_ratio(pos.height, ratio.a, ratio.b),
                     y: pos.y,
                     width: pos.width,
@@ -739,6 +744,7 @@ fn render_node(
                   Split(b),
                   last_input,
                   Pos(
+                    ..pos,
                     x: pos.x,
                     y: pos.y + calc_ratio(pos.width, ratio.a, ratio.b) + 1,
                     width: calc_ratio(pos.width, ratio.b, ratio.a),
@@ -752,16 +758,31 @@ fn render_node(
           }
       }
     Debug -> string.inspect(pos) |> Some
-    Div(children, separator) ->
+    Div(children, separator) -> {
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
       |> string.join(sep(separator))
       |> string.append(c(SavePos), _)
       |> Some
+    }
+    DivRow(children) -> {
+      let len = children |> list.length
+      list.index_map(children, fn(child, idx) {
+        let width = pos.width / len
+        let x = idx * width
+        let pos = Pos(..pos, x:, width:)
+        render_node(state, child, last_input, pos)
+        |> option.map(fn(r) { c(MoveRight(x - string.length(r))) <> r })
+      })
+      |> option.values
+      |> string.join(sep(Row))
+      //  |> string.append(c(SavePos), _)
+      |> Some
+    }
     Box(children, title) -> {
       // TODO: review how box grid gaps implement
       let pos = Pos(..pos, width: pos.width - 3, height: pos.height - 2)
-      let pos_child = Pos(..pos, width: pos.width - 2, height: pos.height - 2)
+      let pos_child = Pos(..pos, width: pos.width - 2)
       [
         draw_box(int.max(pos.width, 1), int.max(pos.height, 1), title),
         ..list.map(children, render_node(state, _, last_input, pos_child))
@@ -772,8 +793,8 @@ fn render_node(
     }
     Table(width:, table:) ->
       draw_table(int.min(width, pos.width), table) |> Some
-    Button(text, input, _) ->
-      draw_btn(Btn(10, 1, "", text, last_input == input)) |> Some
+    Button(text, input, _, align) ->
+      draw_btn(Btn(pos.width, 1, "", text, last_input == input, align)) |> Some
     KeyBind(..) -> None
     Input(label, value, width, _event, style) -> {
       let width = calc_size_input(width, pos.width, label)
@@ -811,6 +832,18 @@ fn render_node(
         <> c(Reset)
       }
       |> Some
+    TextAlign(text, fg, bg, align) -> {
+      {
+        c(Reset)
+        <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+        <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
+        <> text
+        |> string.slice(0, pos.width - 2)
+        |> calc_align(align, pos.width)
+        <> c(Reset)
+      }
+      |> Some
+    }
 
     TextMulti(text, fg, bg) ->
       {
@@ -916,14 +949,18 @@ pub type Node(msg) {
   BR
   /// A text string
   Text(text: String, fg: Option(Color), bg: Option(Color))
+  /// A text string that can also be aligned
+  TextAlign(text: String, fg: Option(Color), bg: Option(Color), align: Align)
   /// A multi-line text string
   TextMulti(text: String, fg: Option(Color), bg: Option(Color))
   /// A button assigned to a key press to execute an event
-  Button(text: String, key: Key, event: msg)
+  Button(text: String, key: Key, event: msg, align: Align)
   /// A non-visible button assigned to a key press to execute an event
   KeyBind(key: Key, event: msg)
   /// A container element for holding other nodes
   Div(children: List(Node(msg)), separator: Separator)
+  /// A container element for holding other nodes in a single line
+  DivRow(children: List(Node(msg)))
   /// A box container element for holding other nodes
   Box(children: List(Node(msg)), title: Option(String))
   /// A table layout
@@ -986,6 +1023,22 @@ pub type Style {
   Border
 }
 
+pub type Align {
+  Left
+  Center
+  Right
+}
+
+fn calc_align(text: String, align: Align, width: Int) -> String {
+  let len = text |> string.length
+  let center = { width / 2 } - { len / 2 }
+  case align {
+    Left -> text
+    Center -> c(SavePos) <> c(MoveRight(center)) <> text <> c(LoadPos)
+    Right -> c(SavePos) <> c(MoveRight(width - len)) <> text <> c(LoadPos)
+  }
+}
+
 fn do_middle(width: Int, height: Int, acc: List(String)) -> String {
   case height {
     0 -> acc |> string.join(c(MoveLeft(width + 2)) <> c(MoveDown(1)))
@@ -999,7 +1052,14 @@ fn middle(width: Int) -> String {
 }
 
 type Btn {
-  Btn(width: Int, height: Int, title: String, text: String, pressed: Bool)
+  Btn(
+    width: Int,
+    height: Int,
+    title: String,
+    text: String,
+    pressed: Bool,
+    align: Align,
+  )
 }
 
 type Iput {
@@ -1092,7 +1152,7 @@ fn map_cursor(str: String, cursor: Int, width: Int) -> String {
 }
 
 fn draw_btn(btn: Btn) -> String {
-  let button = "  " <> btn.text <> "  "
+  let button = { "  " <> btn.text <> "  " } |> calc_align(btn.align, btn.width)
   let bg = case btn.pressed {
     False -> Blue |> Bg |> c
     True -> Green |> Bg |> c
