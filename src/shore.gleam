@@ -101,13 +101,14 @@ fn do_calc_sizes(
 // LAYOUT HELPER
 //
 
-pub fn layout_center(content: Node(msg)) -> Layout(msg) {
-  Grid(
-    gap: 0,
-    rows: [Fill, Px(25), Fill],
-    columns: [Fill, Px(50), Fill],
-    cells: [Cell(content:, row: #(1, 1), col: #(1, 1))],
-  )
+pub fn layout_center(
+  content: Node(msg),
+  width: Ratio,
+  height: Ratio,
+) -> Layout(msg) {
+  Grid(gap: 0, rows: [Fill, height, Fill], columns: [Fill, width, Fill], cells: [
+    Cell(content:, row: #(1, 1), col: #(1, 1)),
+  ])
 }
 
 pub fn layout_split(left: Node(msg), right: Node(msg)) -> Layout(msg) {
