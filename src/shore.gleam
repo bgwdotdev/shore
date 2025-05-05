@@ -26,10 +26,14 @@ pub type Layout(msg) {
 }
 
 pub type Cell(msg) {
-  Cell(content: fn() -> Node(msg), row: #(Int, Int), col: #(Int, Int))
+  Cell(content: Node(msg), row: #(Int, Int), col: #(Int, Int))
 }
 
-pub fn layout(layout: Layout(msg), width: Int, height: Int) {
+fn layout(
+  layout: Layout(msg),
+  width: Int,
+  height: Int,
+) -> List(#(Node(msg), Pos)) {
   let col_sizes = layout.columns |> calc_sizes(width, _)
   let row_sizes = layout.rows |> calc_sizes(height, _)
   layout.cells
@@ -94,6 +98,26 @@ fn do_calc_sizes(
 }
 
 //
+// LAYOUT HELPER
+//
+
+pub fn layout_center(content: Node(msg)) -> Layout(msg) {
+  Grid(
+    gap: 0,
+    rows: [Fill, Px(25), Fill],
+    columns: [Fill, Px(50), Fill],
+    cells: [Cell(content:, row: #(1, 1), col: #(1, 1))],
+  )
+}
+
+pub fn layout_split(left: Node(msg), right: Node(msg)) -> Layout(msg) {
+  Grid(gap: 0, rows: [Pct(100)], columns: [Pct(50), Fill], cells: [
+    Cell(content: left, row: #(0, 0), col: #(0, 0)),
+    Cell(content: right, row: #(0, 0), col: #(1, 1)),
+  ])
+}
+
+//
 // INIT
 //
 
@@ -112,6 +136,8 @@ type State(model, msg) {
   State(
     spec: Spec(model, msg),
     model: model,
+    width: Int,
+    height: Int,
     tasks: process.Subject(Event(msg)),
     mode: Mode,
     last_input: String,
@@ -184,10 +210,14 @@ fn shore_start(spec: Spec(model, msg)) {
     init: fn() {
       let tasks = process.new_subject()
       let #(model, task_init) = spec.init()
+      let assert Ok(width) = terminal_columns()
+      let assert Ok(height) = terminal_rows()
       let state =
         State(
           spec:,
           model:,
+          width:,
+          height:,
           tasks:,
           mode: Normal,
           last_input: "",
@@ -243,7 +273,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
             // TODO: decouple mode from focus clear?
             Some(FocusClear) -> State(..state, focused: None, mode: Normal)
             Some(FocusPrev) -> {
-              let focusable = list_focusable([ui], [])
+              let focusable = list_focusable([ui], state)
               let focused = case state.focused {
                 None -> focusable |> list.first |> option.from_result
                 Some(x) -> focusable |> focus_next(x, False)
@@ -251,7 +281,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
               State(..state, focused:)
             }
             Some(FocusNext) -> {
-              let focusable = list_focusable([ui], []) |> list.reverse
+              let focusable = list_focusable([ui], state) |> list.reverse
               let focused = case state.focused {
                 None -> focusable |> list.first |> option.from_result
                 Some(x) -> focusable |> focus_next(x, False)
@@ -312,6 +342,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
   }
 }
 
+// TDOO: fix to be tail call recursive?
 fn detect_event(
   state: State(model, msg),
   node: Node(msg),
@@ -334,8 +365,12 @@ fn detect_event(
           |> option.lazy_or(fn() { detect_event(state, Split(b), input) })
         Split1(node) -> detect_event(state, node, input)
       }
-    Layouts(layout) -> None
-    // TODO: implement this NOW
+    Layouts(layout) ->
+      layout.cells
+      |> list.map(fn(cell) { detect_event(state, cell.content, input) })
+      |> option.values
+      |> list.first
+      |> option.from_result
     Debug -> None
   }
 }
@@ -414,37 +449,53 @@ fn task_handler(tasks: List(fn() -> msg), queue: Subject(Event(msg))) -> Nil {
 
 fn list_focusable(
   children: List(Node(msg)),
+  state: State(model, msg),
+) -> List(Focused(msg)) {
+  let pos = Pos(0, 0, state.width, state.height)
+  do_list_focusable(pos, children, [])
+}
+
+fn do_list_focusable(
+  pos: Pos,
+  children: List(Node(msg)),
   acc: List(Focused(msg)),
 ) -> List(Focused(msg)) {
   case children {
     [] -> acc
     [x, ..xs] ->
       case x {
-        Div(children, _) | Box(children, _) ->
-          list_focusable(xs, list_focusable(children, acc))
+        Div(children, _) ->
+          do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
+        Box(children, _) -> {
+          let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
+          do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
+        }
+        Layouts(l) -> {
+          layout(l, pos.width, pos.height)
+          |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
+          |> list.flatten
+        }
         Split(split) -> {
           case split {
-            Split1(child) -> list_focusable(xs, list_focusable([child], acc))
+            Split1(child) ->
+              do_list_focusable(pos, xs, do_list_focusable(pos, [child], acc))
             Split2(_, _, a, b) ->
-              list_focusable(xs, list_focusable([Split(a), Split(b)], acc))
+              do_list_focusable(
+                pos,
+                xs,
+                do_list_focusable(pos, [Split(a), Split(b)], acc),
+              )
           }
         }
         Input(label, value, width, event, _) -> {
           let cursor = string.length(value)
-          let Fixed(todo_width) = width
+          let width = calc_size_input(width, pos.width, label)
           let focused =
-            Focused(
-              label:,
-              value:,
-              event:,
-              offset: 0,
-              cursor:,
-              width: todo_width,
-            )
+            Focused(label:, value:, event:, offset: 0, cursor:, width:)
           let offset = input_offset(cursor, focused.offset, focused.width)
-          list_focusable(xs, [Focused(..focused, offset:), ..acc])
+          do_list_focusable(pos, xs, [Focused(..focused, offset:), ..acc])
         }
-        _ -> list_focusable(xs, acc)
+        _ -> do_list_focusable(pos, xs, acc)
       }
   }
 }
@@ -611,7 +662,7 @@ fn render_node(
       layout(l, pos.width, pos.height)
       |> list.map(fn(i) {
         let cursor = c(SetPos({ i.1 }.y, { i.1 }.x))
-        render_node(state, i.0(), last_input, i.1)
+        render_node(state, i.0, last_input, i.1)
         |> option.map(fn(r) { cursor <> r })
       })
       |> option.values
@@ -714,9 +765,7 @@ fn render_node(
       draw_btn(Btn(10, 1, "", text, last_input == input)) |> Some
     KeyBind(..) -> None
     Input(label, value, width, _event, style) -> {
-      let width = case width {
-        Fixed(width) -> width
-      }
+      let width = calc_size_input(width, pos.width, label)
       let #(is_focused, cursor) = case state.focused {
         Some(focused) if focused.label == label -> #(True, focused.cursor)
         _ -> #(False, string.length(value))
@@ -841,7 +890,7 @@ pub type Node(msg) {
   Input(
     label: String,
     value: String,
-    width: Size,
+    width: Ratio,
     event: fn(String) -> msg,
     style: Style,
   )
@@ -885,10 +934,23 @@ pub type Ratio2 {
   Ratio2(a: Ratio, b: Ratio)
 }
 
+// TODO: rename size and remove old size
 pub type Ratio {
   Px(Int)
   Pct(Int)
   Fill
+}
+
+fn calc_size(size: Ratio, width: Int) -> Int {
+  case size {
+    Px(px) -> px
+    Pct(pct) -> width * pct / 100
+    Fill -> width
+  }
+}
+
+fn calc_size_input(size: Ratio, width: Int, label: String) -> Int {
+  calc_size(size, width - string.length(label))
 }
 
 pub type Direction {
