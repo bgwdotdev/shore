@@ -850,16 +850,16 @@ fn text_to_multi(text: String, width: Int, height: Int) -> String {
     |> string.split("\n")
     |> list.take(height)
     |> list.map(string.slice(_, 0, width - 2))
-    |> string.join(c(LoadPos) <> c(Down(1)) <> c(SavePos))
+    |> string.join(c(LoadPos) <> c(MoveDown(1)) <> c(SavePos))
   }
   <> c(LoadPos)
-  <> c(Down(1))
+  <> c(MoveDown(1))
 }
 
 fn sep(separator: Separator) -> String {
   case separator {
-    Row -> c(Right(1))
-    Col | In -> c(LoadPos) <> c(Down(1)) <> c(SavePos)
+    Row -> c(MoveRight(1))
+    Col | In -> c(LoadPos) <> c(MoveDown(1)) <> c(SavePos)
   }
 }
 
@@ -987,7 +987,7 @@ pub type Style {
 
 fn do_middle(width: Int, height: Int, acc: List(String)) -> String {
   case height {
-    0 -> acc |> string.join(c(Left(width + 2)) <> c(Down(1)))
+    0 -> acc |> string.join(c(MoveLeft(width + 2)) <> c(MoveDown(1)))
     h -> do_middle(width, h - 1, [middle(width), ..acc])
   }
 }
@@ -1066,8 +1066,8 @@ fn draw_input(btn: Iput) -> String {
     ["╰", string.repeat("─", btn.width), "╯"] |> string.join("")
   }
   let width = btn.width + 2
-  let start = c(Left(width)) <> c(Down(1))
-  let top_right = c(Up(1 + btn.height))
+  let start = c(MoveLeft(width)) <> c(MoveDown(1))
+  let top_right = c(MoveUp(1 + btn.height))
 
   case btn.style {
     Simple -> [color, btn.title, " ", c(Reset), text_trim] |> string.join("")
@@ -1116,7 +1116,7 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
     }
     |> string.join("")
   let bottom = ["╰", string.repeat("─", width), "╯"] |> string.join("")
-  let start = c(Left(width + 2)) <> c(Down(1))
+  let start = c(MoveLeft(width + 2)) <> c(MoveDown(1))
   [
     c(SavePos),
     top,
@@ -1125,7 +1125,7 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
     start,
     bottom,
     c(LoadPos),
-    c(Right(2)),
+    c(MoveRight(2)),
     c(SavePos),
   ]
   |> string.join("")
@@ -1170,12 +1170,12 @@ fn draw_table(width: Int, values: List(List(String))) -> String {
   let table = TableAttr(width:, col_count:, col_width:, row_count:, row_height:)
 
   let top = ["╭", string.repeat("─", table.width), "╮"] |> string.join("")
-  let start = c(Left(width + 2)) <> c(Down(1))
+  let start = c(MoveLeft(width + 2)) <> c(MoveDown(1))
   let row = fn(row, idx) {
     list.map(row, fn(col) {
       case string.length(col) {
         x if x >= col_width -> string.slice(col, 0, col_width - 3) <> ".. "
-        x -> col <> c(Right(col_width - x))
+        x -> col <> c(MoveRight(col_width - x))
       }
     })
     |> string.join("")
@@ -1187,10 +1187,10 @@ fn draw_table(width: Int, values: List(List(String))) -> String {
           <> c(Fg(Blue))
           <> row
           <> c(Reset)
-          <> c(Right(col_left_over))
+          <> c(MoveRight(col_left_over))
           <> "│"
           <> start
-        _ -> "│" <> row <> c(Right(col_left_over)) <> "│" <> start
+        _ -> "│" <> row <> c(MoveRight(col_left_over)) <> "│" <> start
       }
     }
   }
@@ -1214,10 +1214,10 @@ type TermCode {
   SetPos(x: Int, y: Int)
   SavePos
   LoadPos
-  Up(Int)
-  Down(Int)
-  Left(Int)
-  Right(Int)
+  MoveUp(Int)
+  MoveDown(Int)
+  MoveLeft(Int)
+  MoveRight(Int)
   StartLine
   Column(Int)
   Fg(Color)
@@ -1243,10 +1243,10 @@ fn c(code: TermCode) -> String {
       esc <> "[" <> int.to_string(x) <> ";" <> int.to_string(y) <> "H"
     SavePos -> esc <> "[s"
     LoadPos -> esc <> "[u"
-    Up(i) -> esc <> "[" <> int.to_string(i) <> "A"
-    Down(i) -> esc <> "[" <> int.to_string(i) <> "B"
-    Left(i) -> esc <> "[" <> int.to_string(i) <> "D"
-    Right(i) -> esc <> "[" <> int.to_string(i) <> "C"
+    MoveUp(i) -> esc <> "[" <> int.to_string(i) <> "A"
+    MoveDown(i) -> esc <> "[" <> int.to_string(i) <> "B"
+    MoveLeft(i) -> esc <> "[" <> int.to_string(i) <> "D"
+    MoveRight(i) -> esc <> "[" <> int.to_string(i) <> "C"
     StartLine -> Column(1) |> c
     Column(i) -> esc <> "[" <> int.to_string(i) <> "G"
     Fg(color) -> esc <> "[3" <> col(color) <> "m"
