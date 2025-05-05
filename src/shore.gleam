@@ -758,10 +758,12 @@ fn render_node(
       |> string.append(c(SavePos), _)
       |> Some
     Box(children, title) -> {
+      // TODO: review how box grid gaps implement
       let pos = Pos(..pos, width: pos.width - 3, height: pos.height - 2)
+      let pos_child = Pos(..pos, width: pos.width - 2, height: pos.height - 2)
       [
         draw_box(int.max(pos.width, 1), int.max(pos.height, 1), title),
-        ..list.map(children, render_node(state, _, last_input, pos))
+        ..list.map(children, render_node(state, _, last_input, pos_child))
         |> option.values
       ]
       |> string.join(sep(In))
