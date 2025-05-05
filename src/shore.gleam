@@ -836,8 +836,10 @@ fn render_node(
       |> string.join("")
       |> Some
     BR -> "\n" |> Some
-    Progress(width:, max:, value:, color:) ->
+    Progress(width:, max:, value:, color:) -> {
+      let width = calc_size(width, pos.width)
       draw_progress(width:, max:, value:, color:) |> Some
+    }
   }
 }
 
@@ -929,7 +931,7 @@ pub type Node(msg) {
   Split(Splits(msg))
   Debug
   // progress bar
-  Progress(width: Int, max: Int, value: Int, color: Color)
+  Progress(width: Ratio, max: Int, value: Int, color: Color)
   // TODO
   Layouts(layout: Layout(msg))
 }
