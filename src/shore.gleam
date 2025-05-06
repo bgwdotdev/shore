@@ -376,13 +376,6 @@ fn detect_event(
     | DivRow(children:)
     | DivCol(children:)
     | Box(children:, ..) -> do_detect_event(state, children, input)
-    Split(splits) ->
-      case splits {
-        Split2(a:, b:, ..) ->
-          detect_event(state, Split(a), input)
-          |> option.lazy_or(fn() { detect_event(state, Split(b), input) })
-        Split1(node) -> detect_event(state, node, input)
-      }
     Layouts(layout) ->
       layout.cells
       |> list.map(fn(cell) { detect_event(state, cell.content, input) })
@@ -492,18 +485,6 @@ fn do_list_focusable(
           layout(l, pos.width, pos.height)
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
           |> list.flatten
-        }
-        Split(split) -> {
-          case split {
-            Split1(child) ->
-              do_list_focusable(pos, xs, do_list_focusable(pos, [child], acc))
-            Split2(_, _, a, b) ->
-              do_list_focusable(
-                pos,
-                xs,
-                do_list_focusable(pos, [Split(a), Split(b)], acc),
-              )
-          }
         }
         Input(label, value, width, event, _) -> {
           let cursor = string.length(value)
@@ -648,6 +629,41 @@ fn control_event(input: Key, keybinds: Keybinds) -> Option(Control) {
 }
 
 //
+// ELEMENT
+//
+
+type Element {
+  Element(content: String)
+}
+
+fn element_join(elements: List(Element), separator: String) -> Element {
+  case elements {
+    [] -> Element("")
+    [first, ..rest] -> element_join_loop(rest, separator, first)
+  }
+}
+
+fn element_join_loop(
+  elements: List(Element),
+  separator: String,
+  accumulator: Element,
+) -> Element {
+  case elements {
+    [] -> accumulator
+    [element, ..elements] ->
+      element_join_loop(
+        elements,
+        separator,
+        Element(content: accumulator.content <> separator <> element.content),
+      )
+  }
+}
+
+fn element_append(to first: Element, suffix second: Element) -> Element {
+  Element(content: first.content <> second.content)
+}
+
+//
 // RENDER
 //
 
@@ -661,7 +677,11 @@ fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
   c(BSU) |> io.print
   {
     c(Clear)
-    <> node |> render_node(state, _, last_input, pos) |> option.unwrap("")
+    <> node
+    |> render_node(state, _, last_input, pos)
+    |> option.map(fn(r) { r.content })
+    //|> io.debug
+    |> option.unwrap("")
   }
   |> io.print
   c(ESU) |> io.print
@@ -672,102 +692,27 @@ fn render_node(
   node: Node(msg),
   last_input: Key,
   pos: Pos,
-) -> Option(String) {
+) -> Option(Element) {
   case node {
     Layouts(l) -> {
       layout(l, pos.width, pos.height)
       |> list.map(fn(i) {
         let cursor = c(SetPos({ i.1 }.y, { i.1 }.x))
         render_node(state, i.0, last_input, i.1)
-        |> option.map(fn(r) { cursor <> r })
+        |> option.map(fn(r) { Element(cursor <> r.content) })
       })
       |> option.values
-      |> string.join("")
+      |> element_join("")
       |> Some
     }
-    Split(splits) ->
-      case splits {
-        Split1(node) -> render_node(state, node, last_input, pos)
-        Split2(direction:, ratio:, a:, b:) ->
-          case direction {
-            Horizontal ->
-              [
-                c(SetPos(pos.x, pos.y)) |> Some,
-                render_node(
-                  state,
-                  Split(a),
-                  last_input,
-                  Pos(
-                    ..pos,
-                    width: pos.width,
-                    height: calc_ratio(pos.height, ratio.a, ratio.b),
-                  ),
-                ),
-                c(SetPos(
-                  pos.x + 1 + calc_ratio(pos.height, ratio.a, ratio.b),
-                  pos.y,
-                ))
-                  |> Some,
-                render_node(
-                  state,
-                  Split(b),
-                  last_input,
-                  Pos(
-                    ..pos,
-                    x: pos.x + 1 + calc_ratio(pos.height, ratio.a, ratio.b),
-                    y: pos.y,
-                    width: pos.width,
-                    height: calc_ratio(pos.height, ratio.b, ratio.a),
-                  ),
-                ),
-              ]
-              |> option.values
-              |> string.join("")
-              |> Some
-            Vertical ->
-              [
-                c(SetPos(pos.x, pos.y)) |> Some,
-                render_node(
-                  state,
-                  Split(a),
-                  last_input,
-                  Pos(
-                    ..pos,
-                    width: calc_ratio(pos.width, ratio.a, ratio.b),
-                    height: pos.height,
-                  ),
-                ),
-                c(SetPos(
-                  pos.x,
-                  pos.y + 1 + calc_ratio(pos.width, ratio.a, ratio.b),
-                ))
-                  |> Some,
-                render_node(
-                  state,
-                  Split(b),
-                  last_input,
-                  Pos(
-                    ..pos,
-                    x: pos.x,
-                    y: pos.y + calc_ratio(pos.width, ratio.a, ratio.b) + 1,
-                    width: calc_ratio(pos.width, ratio.b, ratio.a),
-                    height: pos.height,
-                  ),
-                ),
-              ]
-              |> option.values
-              |> string.join("")
-              |> Some
-          }
-      }
-    Debug -> string.inspect(pos) |> Some
+    Debug -> string.inspect(pos) |> Element |> Some
     Aligned(align, node) ->
       render_node(state, node, last_input, Pos(..pos, align:))
     Div(children, separator) -> {
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
-      |> string.join(sep(separator))
-      |> string.append(c(SavePos), _)
+      |> element_join(sep(separator))
+      |> element_append(Element(c(SavePos)), _)
       |> Some
     }
     DivRow(children) -> {
@@ -785,18 +730,18 @@ fn render_node(
             Right -> MoveRight(5)
             //Right -> MoveRight(0)
           }
-          c(move) <> r
+          Element(c(move) <> r.content)
         })
       })
       |> option.values
-      |> string.join(sep(Row))
+      |> element_join(sep(Row))
       |> Some
     }
     DivCol(children) -> {
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
-      |> string.join(sep(Col))
-      |> string.append(c(SavePos), _)
+      |> element_join(sep(Col))
+      |> element_append(Element(c(SavePos)), _)
       |> Some
     }
     Box(children, title) -> {
@@ -808,7 +753,7 @@ fn render_node(
         ..list.map(children, render_node(state, _, last_input, pos_child))
         |> option.values
       ]
-      |> string.join(sep(In))
+      |> element_join(sep(In))
       |> Some
     }
     Table(width:, table:) ->
@@ -854,6 +799,7 @@ fn render_node(
         |> calc_align(pos.align, pos.width)
         <> c(Reset)
       }
+      |> Element
       |> Some
     }
 
@@ -865,11 +811,14 @@ fn render_node(
         <> text |> text_to_multi(pos.width, pos.height)
         <> c(Reset)
       }
+      |> Element
       |> Some
 
-    HR -> string.repeat("─", pos.width) |> Some
+    HR -> string.repeat("─", pos.width) |> Element |> Some
     HR2(color) ->
-      { c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) } |> Some
+      { c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) }
+      |> Element
+      |> Some
     Bar(color) ->
       [
         c(SavePos),
@@ -880,8 +829,9 @@ fn render_node(
         c(LoadPos),
       ]
       |> string.join("")
+      |> Element
       |> Some
-    BR -> "\n" |> Some
+    BR -> "\n" |> Element |> Some
     Progress(width:, max:, value:, color:) -> {
       let width = calc_size(width, pos.width)
       draw_progress(width:, max:, value:, color:) |> Some
@@ -979,23 +929,11 @@ pub type Node(msg) {
   Box(children: List(Node(msg)), title: Option(String))
   /// A table layout
   Table(width: Int, table: List(List(String)))
-  /// TODO: document
-  Split(Splits(msg))
   Debug
   // progress bar
   Progress(width: Ratio, max: Int, value: Int, color: Color)
   // TODO
   Layouts(layout: Layout(msg))
-}
-
-/// TODO
-pub type Splits(msg) {
-  Split1(node: Node(msg))
-  Split2(direction: Direction, ratio: Ratio2, a: Splits(msg), b: Splits(msg))
-}
-
-pub type Ratio2 {
-  Ratio2(a: Ratio, b: Ratio)
 }
 
 // TODO: rename size and remove old size
@@ -1097,7 +1035,7 @@ type Iput {
   )
 }
 
-fn draw_input(btn: Iput) -> String {
+fn draw_input(btn: Iput) -> Element {
   // 2 == padding of space either side
   let color = case btn.pressed, btn.insert {
     True, True -> Green |> Fg |> c
@@ -1157,6 +1095,7 @@ fn draw_input(btn: Iput) -> String {
       [color, top(), start, middle(), start, bottom(), top_right, Reset |> c]
       |> string.join("")
   }
+  |> Element
 }
 
 fn map_cursor(str: String, cursor: Int, width: Int) -> String {
@@ -1172,7 +1111,7 @@ fn map_cursor(str: String, cursor: Int, width: Int) -> String {
   |> string.join("")
 }
 
-fn draw_btn(btn: Btn) -> String {
+fn draw_btn(btn: Btn) -> Element {
   let button = { "  " <> btn.text <> "  " } |> calc_align(btn.align, btn.width)
   let bg = case btn.pressed {
     False -> Blue |> Bg |> c
@@ -1180,9 +1119,10 @@ fn draw_btn(btn: Btn) -> String {
   }
   [bg, c(Fg(Black)), button, c(Reset)]
   |> string.join("")
+  |> Element
 }
 
-fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
+fn draw_box(width: Int, height: Int, title: Option(String)) -> Element {
   let top =
     case title {
       Some(title) -> [
@@ -1211,6 +1151,7 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> String {
     c(SavePos),
   ]
   |> string.join("")
+  |> Element
 }
 
 fn draw_progress(
@@ -1218,7 +1159,7 @@ fn draw_progress(
   max max: Int,
   value value: Int,
   color color: Color,
-) -> String {
+) -> Element {
   let progress = value * 100 / max
   let complete = progress * width / 100 |> int.min(width)
   let rest = width - complete
@@ -1230,6 +1171,7 @@ fn draw_progress(
     string.repeat("░", rest),
   ]
   |> string.join("")
+  |> Element
 }
 
 type TableAttr {
@@ -1242,7 +1184,7 @@ type TableAttr {
   )
 }
 
-fn draw_table(width: Int, values: List(List(String))) -> String {
+fn draw_table(width: Int, values: List(List(String))) -> Element {
   let col_count =
     values |> list.first |> result.map(list.length) |> result.unwrap(1)
   let col_width = { width - 2 } / col_count
@@ -1280,6 +1222,7 @@ fn draw_table(width: Int, values: List(List(String))) -> String {
   let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
   [c(Reset), top, start, rows, bottom, start]
   |> string.join("")
+  |> Element
 }
 
 //
