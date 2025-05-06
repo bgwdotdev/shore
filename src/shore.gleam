@@ -366,13 +366,16 @@ fn detect_event(
   case node {
     Input(..) -> None
     HR | HR2(..) | Bar(..) | BR | Progress(..) | Table(..) -> None
-    Text(..) | TextAlign(..) | TextMulti(..) -> None
+    Text(..) | TextMulti(..) -> None
     Button(key:, event:, ..) if input == key -> Some(event)
     Button(..) -> None
     KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
-    Div(children, _) | DivRow(children) | Box(children, _) ->
-      do_detect_event(state, children, input)
+    Aligned(node:, ..) -> detect_event(state, node, input)
+    Div(children:, ..)
+    | DivRow(children:)
+    | DivCol(children:)
+    | Box(children:, ..) -> do_detect_event(state, children, input)
     Split(splits) ->
       case splits {
         Split2(a:, b:, ..) ->
@@ -758,6 +761,8 @@ fn render_node(
           }
       }
     Debug -> string.inspect(pos) |> Some
+    Aligned(align, node) ->
+      render_node(state, node, last_input, Pos(..pos, align:))
     Div(children, separator) -> {
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
@@ -767,16 +772,31 @@ fn render_node(
     }
     DivRow(children) -> {
       let len = children |> list.length
+      let width = pos.width / len
       list.index_map(children, fn(child, idx) {
-        let width = pos.width / len
         let x = idx * width
-        let pos = Pos(..pos, x:, width:)
-        render_node(state, child, last_input, pos)
-        |> option.map(fn(r) { c(MoveRight(x - string.length(r))) <> r })
+        let new_pos = Pos(..pos, x:, width:, align: right_is_left(pos.align))
+        render_node(state, child, last_input, new_pos)
+        |> option.map(fn(r) {
+          let move = case pos.align {
+            Left -> MoveRight(0)
+            Center -> MoveRight(x)
+            //Right -> MoveRight(pos.width - string.length(strip_color(r)))
+            Right -> MoveRight(5)
+            //Right -> MoveRight(0)
+          }
+          c(move) <> r
+        })
       })
       |> option.values
       |> string.join(sep(Row))
-      //  |> string.append(c(SavePos), _)
+      |> Some
+    }
+    DivCol(children) -> {
+      list.map(children, render_node(state, _, last_input, pos))
+      |> option.values
+      |> string.join(sep(Col))
+      |> string.append(c(SavePos), _)
       |> Some
     }
     Box(children, title) -> {
@@ -793,8 +813,9 @@ fn render_node(
     }
     Table(width:, table:) ->
       draw_table(int.min(width, pos.width), table) |> Some
-    Button(text, input, _, align) ->
-      draw_btn(Btn(pos.width, 1, "", text, last_input == input, align)) |> Some
+    Button(text, input, _) ->
+      draw_btn(Btn(pos.width, 1, "", text, last_input == input, pos.align))
+      |> Some
     KeyBind(..) -> None
     Input(label, value, width, _event, style) -> {
       let width = calc_size_input(width, pos.width, label)
@@ -823,23 +844,14 @@ fn render_node(
       ))
       |> Some
     }
-    Text(text, fg, bg) ->
-      {
-        c(Reset)
-        <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
-        <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-        <> text |> string.slice(0, pos.width - 2)
-        <> c(Reset)
-      }
-      |> Some
-    TextAlign(text, fg, bg, align) -> {
+    Text(text, fg, bg) -> {
       {
         c(Reset)
         <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
         <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
         <> text
         |> string.slice(0, pos.width - 2)
-        |> calc_align(align, pos.width)
+        |> calc_align(pos.align, pos.width)
         <> c(Reset)
       }
       |> Some
@@ -949,16 +961,18 @@ pub type Node(msg) {
   BR
   /// A text string
   Text(text: String, fg: Option(Color), bg: Option(Color))
-  /// A text string that can also be aligned
-  TextAlign(text: String, fg: Option(Color), bg: Option(Color), align: Align)
   /// A multi-line text string
   TextMulti(text: String, fg: Option(Color), bg: Option(Color))
   /// A button assigned to a key press to execute an event
-  Button(text: String, key: Key, event: msg, align: Align)
+  Button(text: String, key: Key, event: msg)
   /// A non-visible button assigned to a key press to execute an event
   KeyBind(key: Key, event: msg)
+  /// Sets alignment of all child nodes
+  Aligned(align: Align, node: Node(msg))
   /// A container element for holding other nodes
   Div(children: List(Node(msg)), separator: Separator)
+  /// A container element for holding other nodes over multiple lines
+  DivCol(children: List(Node(msg)))
   /// A container element for holding other nodes in a single line
   DivRow(children: List(Node(msg)))
   /// A box container element for holding other nodes
@@ -1036,6 +1050,13 @@ fn calc_align(text: String, align: Align, width: Int) -> String {
     Left -> text
     Center -> c(SavePos) <> c(MoveRight(center)) <> text <> c(LoadPos)
     Right -> c(SavePos) <> c(MoveRight(width - len)) <> text <> c(LoadPos)
+  }
+}
+
+fn right_is_left(align: Align) -> Align {
+  case align {
+    Right -> Left
+    x -> x
   }
 }
 
