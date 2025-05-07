@@ -643,12 +643,12 @@ fn control_event(input: Key, keybinds: Keybinds) -> Option(Control) {
 //
 
 type Element {
-  Element(content: String)
+  Element(content: String, width: Int, height: Int)
 }
 
 fn element_join(elements: List(Element), separator: String) -> Element {
   case elements {
-    [] -> Element("")
+    [] -> Element("", 0, 0)
     [first, ..rest] -> element_join_loop(rest, separator, first)
   }
 }
@@ -664,13 +664,25 @@ fn element_join_loop(
       element_join_loop(
         elements,
         separator,
-        Element(content: accumulator.content <> separator <> element.content),
+        Element(
+          content: accumulator.content <> separator <> element.content,
+          width: accumulator.width + element.width,
+          height: accumulator.height + element.height,
+        ),
       )
   }
 }
 
 fn element_append(to first: Element, suffix second: Element) -> Element {
-  Element(content: first.content <> second.content)
+  Element(
+    content: first.content <> second.content,
+    width: first.width + second.width,
+    height: first.height + second.height,
+  )
+}
+
+fn element_prefix(element: Element, prefix: String) -> Element {
+  Element(..element, content: prefix <> element.content)
 }
 
 //
@@ -708,13 +720,17 @@ fn render_node(
       |> list.map(fn(i) {
         let cursor = c(SetPos({ i.1 }.y, { i.1 }.x))
         render_node(state, i.0, last_input, i.1)
-        |> option.map(fn(r) { Element(cursor <> r.content) })
+        |> option.map(fn(r) { element_prefix(r, cursor) })
       })
       |> option.values
       |> element_join("")
       |> Some
     }
-    Debug -> string.inspect(pos) |> Element |> Some
+    Debug -> {
+      let content = string.inspect(pos)
+      let width = string.length(content)
+      Element(content:, width:, height: 1) |> Some
+    }
     Aligned(align, node) ->
       render_node(state, node, last_input, Pos(..pos, align:))
     DivRow(children) -> {
@@ -732,7 +748,7 @@ fn render_node(
             Right -> MoveRight(5)
             //Right -> MoveRight(0)
           }
-          Element(c(move) <> r.content)
+          element_prefix(r, c(move))
         })
       })
       |> option.values
@@ -743,7 +759,7 @@ fn render_node(
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
       |> element_join(sep(Col))
-      |> element_append(Element(c(SavePos)), _)
+      |> element_prefix(c(SavePos))
       |> Some
     }
     Box(children, title) -> {
@@ -791,35 +807,16 @@ fn render_node(
       ))
       |> Some
     }
-    Text(text, fg, bg) -> {
-      {
-        c(Reset)
-        <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
-        <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-        <> text
-        |> string.slice(0, pos.width - 2)
-        |> calc_align(pos.align, pos.width)
-        <> c(Reset)
-      }
-      |> Element
-      |> Some
-    }
+    Text(text, fg, bg) -> draw_text(text, fg, bg, pos) |> Some
+    TextMulti(text, fg, bg) -> draw_text_multi(text, fg, bg, pos) |> Some
 
-    TextMulti(text, fg, bg) ->
-      {
-        c(Reset)
-        <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
-        <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-        <> text |> text_to_multi(pos.width, pos.height)
-        <> c(Reset)
-      }
-      |> Element
+    HR ->
+      string.repeat("─", pos.width)
+      |> Element(width: pos.width, height: 1)
       |> Some
-
-    HR -> string.repeat("─", pos.width) |> Element |> Some
     HR2(color) ->
       { c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) }
-      |> Element
+      |> Element(width: pos.width, height: 1)
       |> Some
     Bar(color) ->
       [
@@ -831,9 +828,9 @@ fn render_node(
         c(LoadPos),
       ]
       |> string.join("")
-      |> Element
+      |> Element(width: pos.width, height: 1)
       |> Some
-    BR -> "\n" |> Element |> Some
+    BR -> "\n" |> Element(width: pos.width, height: 1) |> Some
     Progress(width:, max:, value:, color:) -> {
       let width = calc_size(width, pos.width)
       draw_progress(width:, max:, value:, color:) |> Some
@@ -841,17 +838,50 @@ fn render_node(
   }
 }
 
-fn text_to_multi(text: String, width: Int, height: Int) -> String {
-  c(SavePos)
-  <> {
+fn draw_text(
+  text: String,
+  fg: Option(Color),
+  bg: Option(Color),
+  pos: Pos,
+) -> Element {
+  let width = pos.width - 2
+  let text =
     text
-    |> string.split("\n")
-    |> list.take(height)
-    |> list.map(string.slice(_, 0, width - 2))
-    |> string.join(c(LoadPos) <> c(MoveDown(1)) <> c(SavePos))
-  }
-  <> c(LoadPos)
-  <> c(MoveDown(1))
+    |> string.slice(0, width)
+    |> calc_align(pos.align, pos.width)
+  style_text(text, fg, bg) |> Element(width:, height: 1)
+}
+
+fn style_text(text: String, fg: Option(Color), bg: Option(Color)) -> String {
+  c(Reset)
+  <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+  <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
+  <> text
+  <> c(Reset)
+}
+
+fn draw_text_multi(
+  text: String,
+  fg: Option(Color),
+  bg: Option(Color),
+  pos: Pos,
+) -> Element {
+  let width = pos.width - 2
+  let height = pos.height
+  let text =
+    c(SavePos)
+    <> {
+      text
+      |> string.split("\n")
+      |> list.take(height)
+      |> list.map(string.slice(_, 0, width))
+      |> string.join(c(LoadPos) <> c(MoveDown(1)) <> c(SavePos))
+    }
+    <> c(LoadPos)
+    <> c(MoveDown(1))
+  text
+  |> style_text(fg, bg)
+  |> Element(width:, height:)
 }
 
 fn sep(separator: Separator) -> String {
@@ -1076,7 +1106,7 @@ fn draw_input(btn: Iput) -> Element {
       [color, top(), start, middle(), start, bottom(), top_right, Reset |> c]
       |> string.join("")
   }
-  |> Element
+  |> Element(width: btn.width, height: btn.height)
 }
 
 fn map_cursor(str: String, cursor: Int, width: Int) -> String {
@@ -1093,14 +1123,18 @@ fn map_cursor(str: String, cursor: Int, width: Int) -> String {
 }
 
 fn draw_btn(btn: Btn) -> Element {
-  let button = { "  " <> btn.text <> "  " } |> calc_align(btn.align, btn.width)
+  let button = {
+    "  " <> btn.text <> "  "
+  }
+  let width = string.length(button)
+  let button = button |> calc_align(btn.align, btn.width)
   let bg = case btn.pressed {
     False -> Blue |> Bg |> c
     True -> Green |> Bg |> c
   }
   [bg, c(Fg(Black)), button, c(Reset)]
   |> string.join("")
-  |> Element
+  |> Element(width:, height: 1)
 }
 
 fn draw_box(width: Int, height: Int, title: Option(String)) -> Element {
@@ -1132,7 +1166,7 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> Element {
     c(SavePos),
   ]
   |> string.join("")
-  |> Element
+  |> Element(width:, height:)
 }
 
 fn draw_progress(
@@ -1152,7 +1186,7 @@ fn draw_progress(
     string.repeat("░", rest),
   ]
   |> string.join("")
-  |> Element
+  |> Element(width:, height: 1)
 }
 
 type TableAttr {
@@ -1203,7 +1237,7 @@ fn draw_table(width: Int, values: List(List(String))) -> Element {
   let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
   [c(Reset), top, start, rows, bottom, start]
   |> string.join("")
-  |> Element
+  |> Element(width:, height: row_count + 2)
 }
 
 //
