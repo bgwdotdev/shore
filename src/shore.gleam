@@ -876,10 +876,10 @@ fn draw_text_multi(
     c(SavePos)
     <> {
       text
-      //|> calc_align(pos.align, pos.width)
       |> string.split("\n")
       |> list.take(height)
       |> list.map(string.slice(_, 0, width))
+      |> list.map(calc_align(_, pos.align, pos.width))
       |> string.join(c(LoadPos) <> c(MoveDown(1)) <> c(SavePos))
     }
     <> c(LoadPos)
