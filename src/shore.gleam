@@ -853,56 +853,9 @@ fn render_node(
     BR -> "\n" |> Element(width: pos.width, height: 1) |> Some
     Progress(width:, max:, value:, color:) -> {
       let width = calc_size(width, pos.width)
-      draw_progress(width:, max:, value:, color:) |> Some
+      draw_progress(width:, max:, value:, color:, pos:) |> Some
     }
   }
-}
-
-fn draw_text(
-  text: String,
-  fg: Option(Color),
-  bg: Option(Color),
-  pos: Pos,
-) -> Element {
-  let width = pos.width - 2
-  text
-  |> string.slice(0, width)
-  |> calc_align(pos.align, pos.width)
-  |> style_text(fg, bg)
-  |> Element(width:, height: 1)
-}
-
-fn style_text(text: String, fg: Option(Color), bg: Option(Color)) -> String {
-  c(Reset)
-  <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
-  <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-  <> text
-  <> c(Reset)
-}
-
-fn draw_text_multi(
-  text: String,
-  fg: Option(Color),
-  bg: Option(Color),
-  pos: Pos,
-) -> Element {
-  let width = pos.width - 2
-  let height = pos.height
-  let text =
-    c(SavePos)
-    <> {
-      text
-      |> string.split("\n")
-      |> list.take(height)
-      |> list.map(string.slice(_, 0, width))
-      |> list.map(calc_align(_, pos.align, pos.width))
-      |> string.join(c(LoadPos) <> c(MoveDown(1)) <> c(SavePos))
-    }
-    <> c(LoadPos)
-    <> c(MoveDown(1))
-  text
-  |> style_text(fg, bg)
-  |> Element(width:, height:)
 }
 
 fn sep(separator: Separator) -> String {
@@ -975,11 +928,6 @@ fn calc_size_input(size: Size, width: Int, label: String) -> Int {
   calc_size(size, width - string.length(label))
 }
 
-pub type Direction {
-  Horizontal
-  Vertical
-}
-
 pub type Separator {
   Row
   Col
@@ -999,6 +947,10 @@ pub type Align {
 
 fn calc_align(text: String, align: Align, width: Int) -> String {
   let len = text |> string.length
+  calc_align_len(text, align, width, len)
+}
+
+fn calc_align_len(text: String, align: Align, width: Int, len: Int) -> String {
   let center = { width / 2 } - { len / 2 }
   case align {
     Left -> text
@@ -1026,15 +978,51 @@ fn middle(width: Int) -> String {
   ["│", string.repeat(fill, width), "│"] |> string.join("")
 }
 
-type Btn {
-  Btn(
-    width: Int,
-    height: Int,
-    title: String,
-    text: String,
-    pressed: Bool,
-    align: Align,
-  )
+fn draw_text(
+  text: String,
+  fg: Option(Color),
+  bg: Option(Color),
+  pos: Pos,
+) -> Element {
+  let width = pos.width - 2
+  text
+  |> string.slice(0, width)
+  |> calc_align(pos.align, pos.width)
+  |> style_text(fg, bg)
+  |> Element(width:, height: 1)
+}
+
+fn style_text(text: String, fg: Option(Color), bg: Option(Color)) -> String {
+  c(Reset)
+  <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
+  <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
+  <> text
+  <> c(Reset)
+}
+
+fn draw_text_multi(
+  text: String,
+  fg: Option(Color),
+  bg: Option(Color),
+  pos: Pos,
+) -> Element {
+  let width = pos.width - 2
+  let height = pos.height
+  let text =
+    c(SavePos)
+    <> {
+      text
+      |> string.split("\n")
+      |> list.take(height)
+      |> list.map(string.slice(_, 0, width))
+      |> list.map(calc_align(_, pos.align, pos.width))
+      |> string.join(c(LoadPos) <> c(MoveDown(1)) <> c(SavePos))
+    }
+    <> c(LoadPos)
+    <> c(MoveDown(1))
+  text
+  |> style_text(fg, bg)
+  |> Element(width:, height:)
 }
 
 type Iput {
@@ -1127,6 +1115,17 @@ fn map_cursor(str: String, cursor: Int, width: Int) -> String {
   |> string.join("")
 }
 
+type Btn {
+  Btn(
+    width: Int,
+    height: Int,
+    title: String,
+    text: String,
+    pressed: Bool,
+    align: Align,
+  )
+}
+
 fn draw_btn(btn: Btn) -> Element {
   let button = {
     "  " <> btn.text <> "  "
@@ -1179,10 +1178,12 @@ fn draw_progress(
   max max: Int,
   value value: Int,
   color color: Color,
+  pos pos: Pos,
 ) -> Element {
   let progress = value * 100 / max
   let complete = progress * width / 100 |> int.min(width)
   let rest = width - complete
+  let len = complete + rest
   [
     c(Reset),
     c(Fg(color)),
@@ -1191,6 +1192,7 @@ fn draw_progress(
     string.repeat("░", rest),
   ]
   |> string.join("")
+  |> calc_align_len(pos.align, pos.width, len)
   |> Element(width:, height: 1)
 }
 
