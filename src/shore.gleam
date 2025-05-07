@@ -742,17 +742,21 @@ fn render_node(
         render_node(state, child, last_input, new_pos)
         |> option.map(fn(r) {
           let move = case pos.align {
-            Left -> MoveRight(0)
-            Center -> MoveRight(x)
-            //Right -> MoveRight(pos.width - string.length(strip_color(r)))
-            Right -> MoveRight(5)
-            //Right -> MoveRight(0)
+            Center -> c(MoveRight(x))
+            Left | Right -> ""
           }
-          element_prefix(r, c(move))
+          element_prefix(r, move)
         })
       })
       |> option.values
       |> element_join(sep(Row))
+      |> fn(ele) {
+        case pos.align {
+          Right -> c(MoveRight(pos.width - ele.width - 1))
+          Left | Center -> ""
+        }
+        |> element_prefix(ele, _)
+      }
       |> Some
     }
     DivCol(children) -> {
@@ -845,11 +849,11 @@ fn draw_text(
   pos: Pos,
 ) -> Element {
   let width = pos.width - 2
-  let text =
-    text
-    |> string.slice(0, width)
-    |> calc_align(pos.align, pos.width)
-  style_text(text, fg, bg) |> Element(width:, height: 1)
+  text
+  |> string.slice(0, width)
+  |> calc_align(pos.align, pos.width)
+  |> style_text(fg, bg)
+  |> Element(width:, height: 1)
 }
 
 fn style_text(text: String, fg: Option(Color), bg: Option(Color)) -> String {
@@ -872,6 +876,7 @@ fn draw_text_multi(
     c(SavePos)
     <> {
       text
+      //|> calc_align(pos.align, pos.width)
       |> string.split("\n")
       |> list.take(height)
       |> list.map(string.slice(_, 0, width))
