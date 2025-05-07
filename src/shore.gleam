@@ -236,6 +236,22 @@ fn shore_start(spec: Spec(model, msg)) {
 }
 
 //
+// READ INPUT
+//
+
+@external(erlang, "io", "get_chars")
+fn get_chars(prompt: String, count: Int) -> String
+
+fn read_input(shore: Subject(Event(msg)), exit: Key) -> Nil {
+  let key = get_chars("", 10) |> key.from_string
+  case key == exit {
+    True -> Exit |> process.send(shore, _)
+    False -> key |> KeyPress |> process.send(shore, _)
+  }
+  read_input(shore, exit)
+}
+
+//
 // EVENT
 //
 
@@ -894,22 +910,6 @@ fn sep(separator: Separator) -> String {
     Row -> c(MoveRight(1))
     Col | In -> c(LoadPos) <> c(MoveDown(1)) <> c(SavePos)
   }
-}
-
-//
-// READ INPUT
-//
-
-@external(erlang, "io", "get_chars")
-fn get_chars(prompt: String, count: Int) -> String
-
-fn read_input(shore: Subject(Event(msg)), exit: Key) -> Nil {
-  let key = get_chars("", 10) |> key.from_string
-  case key == exit {
-    True -> Exit |> process.send(shore, _)
-    False -> key |> KeyPress |> process.send(shore, _)
-  }
-  read_input(shore, exit)
 }
 
 //
