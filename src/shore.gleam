@@ -21,12 +21,7 @@ pub fn main() {
 //
 
 pub type Layout(msg) {
-  Grid(
-    gap: Int,
-    rows: List(Ratio),
-    columns: List(Ratio),
-    cells: List(Cell(msg)),
-  )
+  Grid(gap: Int, rows: List(Size), columns: List(Size), cells: List(Cell(msg)))
 }
 
 pub type Cell(msg) {
@@ -59,7 +54,7 @@ fn calc_cell_size(gap: Int, from: Int, to: Int, of: List(Int)) {
   })
 }
 
-fn calc_sizes(max: Int, sizes: List(Ratio)) {
+fn calc_sizes(max: Int, sizes: List(Size)) {
   let first =
     list.map(sizes, fn(size) {
       case size {
@@ -107,8 +102,8 @@ fn do_calc_sizes(
 
 pub fn layout_center(
   content: Node(msg),
-  width: Ratio,
-  height: Ratio,
+  width: Size,
+  height: Size,
 ) -> Layout(msg) {
   Grid(gap: 0, rows: [Fill, height, Fill], columns: [Fill, width, Fill], cells: [
     Cell(content:, row: #(1, 1), col: #(1, 1)),
@@ -364,25 +359,29 @@ fn detect_event(
   input: Key,
 ) -> Option(msg) {
   case node {
-    Input(..) -> None
-    HR | HR2(..) | Bar(..) | BR | Progress(..) | Table(..) -> None
-    Text(..) | TextMulti(..) -> None
     Button(key:, event:, ..) if input == key -> Some(event)
     Button(..) -> None
     KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
     Aligned(node:, ..) -> detect_event(state, node, input)
-    Div(children:, ..)
-    | DivRow(children:)
-    | DivCol(children:)
-    | Box(children:, ..) -> do_detect_event(state, children, input)
+    DivRow(children:) | DivCol(children:) | Box(children:, ..) ->
+      do_detect_event(state, children, input)
     Layouts(layout) ->
       layout.cells
       |> list.map(fn(cell) { detect_event(state, cell.content, input) })
       |> option.values
       |> list.first
       |> option.from_result
-    Debug -> None
+    Input(..)
+    | HR
+    | HR2(..)
+    | Bar(..)
+    | BR
+    | Progress(..)
+    | Table(..)
+    | Text(..)
+    | TextMulti(..)
+    | Debug -> None
   }
 }
 
@@ -475,9 +474,9 @@ fn do_list_focusable(
     [] -> acc
     [x, ..xs] ->
       case x {
-        Div(children, _) ->
+        DivRow(children) | DivCol(children) ->
           do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
-        Box(children, _) -> {
+        Box(children:, ..) -> {
           let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
           do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
         }
@@ -486,7 +485,7 @@ fn do_list_focusable(
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
           |> list.flatten
         }
-        Input(label, value, width, event, _) -> {
+        Input(label, value, width, event, ..) -> {
           let cursor = string.length(value)
           let width = calc_size_input(width, pos.width, label)
           let focused =
@@ -494,7 +493,18 @@ fn do_list_focusable(
           let offset = input_offset(cursor, focused.offset, focused.width)
           do_list_focusable(pos, xs, [Focused(..focused, offset:), ..acc])
         }
-        _ -> do_list_focusable(pos, xs, acc)
+        Aligned(..)
+        | BR
+        | Bar(..)
+        | Button(..)
+        | Debug
+        | HR
+        | HR2(..)
+        | KeyBind(..)
+        | Progress(..)
+        | Table(..)
+        | Text(..)
+        | TextMulti(..) -> do_list_focusable(pos, xs, acc)
       }
   }
 }
@@ -680,7 +690,6 @@ fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
     <> node
     |> render_node(state, _, last_input, pos)
     |> option.map(fn(r) { r.content })
-    //|> io.debug
     |> option.unwrap("")
   }
   |> io.print
@@ -708,13 +717,6 @@ fn render_node(
     Debug -> string.inspect(pos) |> Element |> Some
     Aligned(align, node) ->
       render_node(state, node, last_input, Pos(..pos, align:))
-    Div(children, separator) -> {
-      list.map(children, render_node(state, _, last_input, pos))
-      |> option.values
-      |> element_join(sep(separator))
-      |> element_append(Element(c(SavePos)), _)
-      |> Some
-    }
     DivRow(children) -> {
       let len = children |> list.length
       let width = pos.width / len
@@ -859,20 +861,6 @@ fn sep(separator: Separator) -> String {
   }
 }
 
-fn calc_ratio(of x: Int, for a: Ratio, minus b: Ratio) -> Int {
-  case a {
-    Px(y) -> y
-    Pct(y) -> x * y / 100
-    Fill ->
-      x
-      - case b {
-        Px(y) -> y
-        Pct(y) -> x * y / 100
-        Fill -> x * 50 / 100
-      }
-  }
-}
-
 //
 // READ INPUT
 //
@@ -898,7 +886,7 @@ pub type Node(msg) {
   Input(
     label: String,
     value: String,
-    width: Ratio,
+    width: Size,
     event: fn(String) -> msg,
     style: Style,
   )
@@ -919,8 +907,6 @@ pub type Node(msg) {
   KeyBind(key: Key, event: msg)
   /// Sets alignment of all child nodes
   Aligned(align: Align, node: Node(msg))
-  /// A container element for holding other nodes
-  Div(children: List(Node(msg)), separator: Separator)
   /// A container element for holding other nodes over multiple lines
   DivCol(children: List(Node(msg)))
   /// A container element for holding other nodes in a single line
@@ -931,19 +917,18 @@ pub type Node(msg) {
   Table(width: Int, table: List(List(String)))
   Debug
   // progress bar
-  Progress(width: Ratio, max: Int, value: Int, color: Color)
+  Progress(width: Size, max: Int, value: Int, color: Color)
   // TODO
   Layouts(layout: Layout(msg))
 }
 
-// TODO: rename size and remove old size
-pub type Ratio {
+pub type Size {
   Px(Int)
   Pct(Int)
   Fill
 }
 
-fn calc_size(size: Ratio, width: Int) -> Int {
+fn calc_size(size: Size, width: Int) -> Int {
   case size {
     Px(px) -> px
     Pct(pct) -> width * pct / 100
@@ -951,7 +936,7 @@ fn calc_size(size: Ratio, width: Int) -> Int {
   }
 }
 
-fn calc_size_input(size: Ratio, width: Int, label: String) -> Int {
+fn calc_size_input(size: Size, width: Int, label: String) -> Int {
   calc_size(size, width - string.length(label))
 }
 
@@ -964,10 +949,6 @@ pub type Separator {
   Row
   Col
   In
-}
-
-pub type Size {
-  Fixed(Int)
 }
 
 pub type Style {
