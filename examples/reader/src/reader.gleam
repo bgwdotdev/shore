@@ -195,56 +195,60 @@ fn do_update_read(files: List(File), focused: Int, idx: Int) -> File {
 fn view(model: Model) -> shore.Node(Msg) {
   case model.errors {
     [] -> {
-      shore.Split(shore.Split2(
-        shore.Horizontal,
-        shore.Ratio2(shore.Px(3), shore.Fill),
-        shore.Split1(shore.Div(
-          [
-            shore.KeyBind(key.Char("k"), Up),
-            shore.KeyBind(key.Char("j"), Down),
-            shore.KeyBind(key.Char("l"), Open),
-            shore.KeyBind(key.Char("h"), Back),
-            model.work_dir
-              |> list.reverse
-              |> string.join("/")
-              |> string.replace("//", "/")
-              |> shore.Text(None, None),
-            shore.HR,
+      shore.Layouts(
+        shore.Grid(
+          gap: 1,
+          rows: [shore.Px(1), shore.Fill],
+          columns: [shore.Pct(30), shore.Fill],
+          cells: [
+            shore.Cell(view_header(model), #(0, 0), #(0, 1)),
+            shore.Cell(view_file_list(model), #(1, 1), #(0, 0)),
+            shore.Cell(view_file_content(model), #(1, 1), #(1, 1)),
           ],
-          shore.Col,
-        )),
-        shore.Split2(
-          shore.Vertical,
-          shore.Ratio2(shore.Pct(30), shore.Fill),
-          shore.Split1(shore.Box(
-            model.files
-              |> sort_files
-              |> list.index_map(fn(f, i) { view_file(f, i, model.focused) }),
-            Some("files"),
-          )),
-          shore.Split1(shore.Box(
-            [model.content |> shore.TextMulti(None, None)],
-            Some("preview"),
-          )),
         ),
-      ))
+      )
     }
     xs ->
-      shore.Div(
-        [
-          shore.KeyBind(key.Char("q"), DismissErrors),
-          xs
-            |> list.map(string.inspect)
-            |> string.join("\n")
-            |> shore.TextMulti(Some(shore.Black), Some(shore.Red)),
-          model
-            |> string.inspect
-            |> string.replace("),", ")\n")
-            |> shore.TextMulti(None, None),
-        ],
-        shore.Col,
-      )
+      shore.DivCol([
+        shore.KeyBind(key.Char("q"), DismissErrors),
+        xs
+          |> list.map(string.inspect)
+          |> string.join("\n")
+          |> shore.TextMulti(Some(shore.Black), Some(shore.Red)),
+        model
+          |> string.inspect
+          |> string.replace("),", ")\n")
+          |> shore.TextMulti(None, None),
+      ])
   }
+}
+
+fn view_header(model: Model) -> shore.Node(Msg) {
+  shore.DivCol([
+    shore.KeyBind(key.Char("k"), Up),
+    shore.KeyBind(key.Char("j"), Down),
+    shore.KeyBind(key.Char("l"), Open),
+    shore.KeyBind(key.Char("h"), Back),
+    model.work_dir
+      |> list.reverse
+      |> string.join("/")
+      |> string.replace("//", "/")
+      |> shore.Text(None, None),
+    shore.HR,
+  ])
+}
+
+fn view_file_list(model: Model) -> shore.Node(Msg) {
+  shore.Box(
+    model.files
+      |> sort_files
+      |> list.index_map(fn(f, i) { view_file(f, i, model.focused) }),
+    Some("files"),
+  )
+}
+
+fn view_file_content(model: Model) -> shore.Node(Msg) {
+  shore.Box([model.content |> shore.TextMulti(None, None)], Some("preview"))
 }
 
 fn view_file(file: File, idx: Int, focused: Int) -> shore.Node(msg) {

@@ -17,7 +17,7 @@ pub fn main() {
       update:,
       exit:,
       keybinds: shore.default_keybinds(),
-      redraw: shore.OnTimer(17),
+      redraw: shore.OnUpdate,
     )
     |> shore.start
   //tick(ui)
@@ -82,69 +82,44 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.Split(shore.Split2(
-    shore.Vertical,
-    shore.Ratio2(shore.Pct(50), shore.Pct(50)),
-    shore.Split1(view_a(model)),
-    shore.Split2(
-      shore.Vertical,
-      shore.Ratio2(shore.Pct(50), shore.Pct(50)),
-      shore.Split1(shore.Text(" ", None, Some(shore.Cyan))),
-      shore.Split2(
-        shore.Vertical,
-        shore.Ratio2(shore.Pct(50), shore.Pct(50)),
-        shore.Split1(shore.Text(" ", None, Some(shore.Red))),
-        shore.Split1(shore.Text(" ", None, Some(shore.Green))),
-      ),
-    ),
-  ))
-}
-
-fn view_a(model: Model) -> shore.Node(Msg) {
-  shore.Div(
-    [
-      "HELLO WORLD" |> shore.Text(None, None),
-      shore.HR,
-      shore.Input("hi", model.hi, shore.Fixed(20), SetHi, shore.Border),
-      shore.BR,
-      shore.BR,
-      model.hi |> shore.Text(None, None),
-      shore.BR,
-      shore.BR,
-      shore.Input("bye", model.bye, shore.Fixed(25), SetBye, shore.Border),
-      shore.BR,
-      model.bye |> shore.Text(None, None),
-      shore.BR,
-      shore.Table(50, model.csv),
-      shore.BR,
-      shore.BR,
-      shore.Progress(20, 100, model.counter, shore.Blue),
-      shore.BR,
-      shore.BR,
-      model.counter |> int.to_string |> shore.Text(Some(shore.Black), None),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Red), None),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Green), None),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Yellow), None),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Blue), None),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Magenta), None),
-      model.counter |> int.to_string |> shore.Text(Some(shore.Cyan), None),
-      model.counter |> int.to_string |> shore.Text(Some(shore.White), None),
-      shore.BR,
-      shore.Div(
-        [
-          shore.Button("++", key.Char("a"), Increment),
-          shore.Button("-", key.Char("b"), Decrement),
-        ],
-        shore.Row,
-      ),
-      case model.counter {
-        x if x > 10 && x < 20 -> shore.Button("reset", key.Char("r"), SendReset)
-        x if x > 20 -> shore.Button("dd", key.Char("d"), Set(0))
-        x -> shore.Text("x", Some(shore.Red), None)
-      },
-    ],
-    shore.Col,
-  )
+  shore.DivCol([
+    "HELLO WORLD" |> shore.Text(None, None),
+    shore.HR,
+    shore.Input("hi", model.hi, shore.Px(20), SetHi, shore.Border),
+    shore.BR,
+    shore.BR,
+    model.hi |> shore.Text(None, None),
+    shore.BR,
+    shore.BR,
+    shore.Input("bye", model.bye, shore.Px(25), SetBye, shore.Border),
+    shore.BR,
+    model.bye |> shore.Text(None, None),
+    shore.BR,
+    shore.Table(50, model.csv),
+    shore.BR,
+    shore.BR,
+    shore.Progress(shore.Px(20), 100, model.counter, shore.Blue),
+    shore.BR,
+    shore.BR,
+    model.counter |> int.to_string |> shore.Text(Some(shore.Black), None),
+    model.counter |> int.to_string |> shore.Text(Some(shore.Red), None),
+    model.counter |> int.to_string |> shore.Text(Some(shore.Green), None),
+    model.counter |> int.to_string |> shore.Text(Some(shore.Yellow), None),
+    model.counter |> int.to_string |> shore.Text(Some(shore.Blue), None),
+    model.counter |> int.to_string |> shore.Text(Some(shore.Magenta), None),
+    model.counter |> int.to_string |> shore.Text(Some(shore.Cyan), None),
+    model.counter |> int.to_string |> shore.Text(Some(shore.White), None),
+    shore.BR,
+    shore.DivRow([
+      shore.Button("Increment", key.Char("a"), Increment),
+      shore.Button("Decrement", key.Char("b"), Decrement),
+    ]),
+    case model.counter {
+      x if x > 10 && x < 20 -> shore.Button("reset", key.Char("r"), SendReset)
+      x if x > 20 -> shore.Button("dd", key.Char("d"), Set(0))
+      x -> shore.Text("x", Some(shore.Red), None)
+    },
+  ])
 }
 
 // CMDS

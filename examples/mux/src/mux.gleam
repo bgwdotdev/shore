@@ -30,22 +30,31 @@ pub fn main() {
 
 pub type Model {
   Model(
+    rows: Int,
+    cols: Int,
     count: Int,
     last_modified: Int,
     cmd: String,
     output: List(Output),
-    term: Term,
+    term: List(Term),
   )
+}
+
+type Direction {
+  Horizontal
+  Vertical
 }
 
 fn init() -> #(Model, List(fn() -> Msg)) {
   let model =
     Model(
+      rows: 0,
+      cols: 0,
       count: 0,
       last_modified: 0,
       cmd: "",
       output: [help()],
-      term: Term(0, "", [help()], None, shore.Horizontal),
+      term: [Term(0, "", [help()], #(0, 0), #(0, 0))],
     )
   let cmd = []
   #(model, cmd)
@@ -60,8 +69,8 @@ pub opaque type Term {
     id: Int,
     cmd: String,
     output: List(Output),
-    term: Option(Term),
-    split: shore.Direction,
+    row: #(Int, Int),
+    col: #(Int, Int),
   )
 }
 
@@ -75,13 +84,13 @@ pub opaque type Err {
 
 // UPDATE
 
-pub type Msg {
+pub opaque type Msg {
   NoOp
   SetCommand(Int, String)
   SendCommand(Int)
   ReceiveCommand(Int, Result(Output, Err))
   Clear(Int)
-  CreateSplit(Int, shore.Direction)
+  CreateSplit(Int, Direction)
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
@@ -115,108 +124,159 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
         update_term(id, model.term, fn(term) { Term(..term, output: []) })
       #(Model(..model, term:), [])
     }
-    CreateSplit(_id, direction) -> {
-      let count = model.count + 1
-      let term =
-        update_term(model.count, model.term, fn(term) {
-          Term(..term, term: Some(Term(count, "", [], None, direction)))
-        })
-      #(Model(..model, count:, term:), [])
+    CreateSplit(id, direction) -> {
+      let new_model = {
+        use term <- result.map(
+          list.filter(model.term, fn(t) { t.id == id }) |> list.first,
+        )
+        case direction {
+          Horizontal ->
+            case term.col.1 == model.cols {
+              True -> {
+                let cols = model.cols + 1
+                let count = model.count + 1
+                let new_term =
+                  Term(count, "", [], #(term.row.0, term.row.0), #(cols, cols))
+                Model(..model, count:, cols:, term: [new_term, ..model.term])
+              }
+              False -> {
+                let cols = model.cols + 1
+                let count = model.count + 1
+                let terms =
+                  list.map(model.term, fn(t) {
+                    case t.row.0 == term.row.0 {
+                      True -> t
+                      False ->
+                        case t.col.1 == model.cols {
+                          True -> Term(..t, col: #(t.col.0, cols))
+                          False -> t
+                        }
+                    }
+                  })
+                let new_term =
+                  Term(count, "", [], #(term.row.0, term.row.0), #(cols, cols))
+
+                Model(..model, count:, cols:, term: [new_term, ..terms])
+              }
+            }
+          Vertical -> {
+            let rows = model.rows + 1
+            let count = model.count + 1
+            let new_term = Term(count, "", [], #(rows, rows), #(0, model.cols))
+            Model(..model, count:, rows:, term: [new_term, ..model.term])
+          }
+        }
+      }
+      case new_model {
+        Ok(model) -> #(model, [])
+        Error(_) -> #(model, [])
+      }
     }
+    //CreateSplit(_id, direction) -> {
+    //  let count = model.count + 1
+    //  // TODO: implement split logic
+    //  let pos = #(0, 0)
+    //  let term =
+    //    update_term(model.count, model.term, fn(term) {
+    //      Term(..term, term: Some(Term(count, "", [], None, pos)))
+    //    })
+    //  #(Model(..model, count:, term:), [])
+    //}
   }
 }
 
-fn update_term(id: Int, term: Term, func: fn(Term) -> Term) -> Term {
-  case id == term.id {
-    True -> func(term)
-    False ->
-      case term.term {
-        Some(child) -> Term(..term, term: Some(update_term(id, child, func)))
-        None -> term
-      }
+fn update_term(id: Int, terms: List(Term), func: fn(Term) -> Term) -> List(Term) {
+  fn(term: Term) {
+    case term.id == id {
+      True -> func(term)
+      False -> term
+    }
   }
+  |> list.map(terms, _)
+  //case id == term.id {
+  //  True -> func(term)
+  //  False ->
+  //    case term.term {
+  //      Some(child) -> Term(..term, term: Some(update_term(id, child, func)))
+  //      None -> term
+  //    }
+  //}
 }
 
 fn update_term_cmd(
   id: Int,
-  term: Term,
+  terms: List(Term),
   func: fn(Term) -> Term,
-) -> #(Term, String) {
-  case id == term.id {
-    True -> #(func(term), term.cmd)
-    False ->
-      case term.term {
-        Some(child) -> {
-          let #(up, cmd) = update_term_cmd(id, child, func)
-          #(Term(..term, term: Some(up)), cmd)
-        }
-        None -> #(term, "echo 'how did I get here?'")
-      }
+) -> #(List(Term), String) {
+  fn(acc: #(List(Term), String), term: Term) {
+    case term.id == id {
+      True -> #([func(term), ..acc.0], term.cmd)
+      False -> #([term, ..acc.0], acc.1)
+    }
   }
+  |> list.fold(terms, #([], ""), _)
 }
 
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.Split(shore.Split2(
-    shore.Horizontal,
-    shore.Ratio2(shore.Px(1), shore.Pct(100)),
-    shore.Split1(view_keybinds(model)),
-    shore.Split1(shore.Split(view_term(model.term))),
-  ))
-}
-
-fn view_keybinds(model: Model) -> shore.Node(Msg) {
-  shore.Div(
-    [
-      shore.KeyBind(key.Enter, SendCommand(model.last_modified)),
-      shore.KeyBind(key.Char("L"), Clear(model.last_modified)),
-      shore.KeyBind(
-        key.Char("H"),
-        CreateSplit(model.last_modified, shore.Horizontal),
-      ),
-      shore.KeyBind(
-        key.Char("V"),
-        CreateSplit(model.last_modified, shore.Vertical),
-      ),
-    ],
-    shore.Row,
+  shore.Layouts(
+    shore.Grid(
+      gap: 1,
+      rows: list.repeat(shore.Fill, model.rows + 1),
+      columns: list.repeat(shore.Fill, model.cols + 1),
+      cells: [view_keybinds(model), ..list.map(model.term, view_term_output)],
+    ),
   )
 }
 
-fn view_term(term: Term) -> shore.Splits(Msg) {
-  let #(size, other, split) = case term.term {
-    Some(term) -> #(
-      shore.Ratio2(shore.Pct(50), shore.Pct(50)),
-      view_term(term),
-      term.split,
-    )
-    None -> #(
-      shore.Ratio2(shore.Pct(100), shore.Pct(10)),
-      view_none(),
-      shore.Horizontal,
-    )
-  }
-  shore.Split2(split, size, shore.Split1(view_term_output(term)), other)
+fn view_keybinds(model: Model) -> shore.Cell(Msg) {
+  shore.Cell(
+    shore.DivRow([
+      shore.KeyBind(key.Enter, SendCommand(model.last_modified)),
+      shore.KeyBind(key.Char("L"), Clear(model.last_modified)),
+      shore.KeyBind(key.Char("H"), CreateSplit(model.last_modified, Horizontal)),
+      shore.KeyBind(key.Char("V"), CreateSplit(model.last_modified, Vertical)),
+    ]),
+    #(0, 0),
+    #(0, 0),
+  )
 }
 
-fn view_term_output(term: Term) -> shore.Node(Msg) {
+//fn view_term(term: Term) -> shore.Splits(Msg) {
+//  let #(size, other, split) = case term.term {
+//    Some(term) -> #(
+//      shore.Ratio2(shore.Pct(50), shore.Pct(50)),
+//      view_term(term),
+//      term.split,
+//    )
+//    None -> #(
+//      shore.Ratio2(shore.Pct(100), shore.Pct(10)),
+//      view_none(),
+//      shore.Horizontal,
+//    )
+//  }
+//  shore.Split2(split, size, shore.Split1(view_term_output(term)), other)
+//}
+
+fn view_term_output(term: Term) -> shore.Cell(Msg) {
   let prompt =
     shore.Input(
       int.to_string(term.id) <> "$",
       term.cmd,
-      shore.Fixed(40),
+      shore.Fill,
       fn(str) { SetCommand(term.id, str) },
       shore.Simple,
     )
   [prompt, ..list.map(term.output, format_output)]
   |> list.reverse
   |> shore.Box(term.id |> int.to_string |> Some)
+  |> shore.Cell(term.row, term.col)
 }
 
-fn view_none() -> shore.Splits(Msg) {
-  shore.Split1(shore.Div([], shore.Col))
-}
+//fn view_none() -> shore.Splits(Msg) {
+//  shore.Split1(shore.Div([], shore.Col))
+//}
 
 fn format_output(output: Output) -> shore.Node(Msg) {
   let out =
