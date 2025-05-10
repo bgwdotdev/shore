@@ -768,7 +768,7 @@ fn render_node(
       |> element_join(sep(Row))
       |> fn(ele) {
         case pos.align {
-          Right -> c(MoveRight(pos.width - ele.width - 1))
+          Right -> c(MoveRight(pos.width - ele.width - { len - 1 }))
           Left | Center -> ""
         }
         |> element_prefix(ele, _)
