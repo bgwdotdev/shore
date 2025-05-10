@@ -28,22 +28,21 @@ pub type Cell(msg) {
   Cell(content: Node(msg), row: #(Int, Int), col: #(Int, Int))
 }
 
-pub fn layout(
-  layout: Layout(msg),
-  width: Int,
-  height: Int,
-) -> List(#(Node(msg), Pos)) {
-  let col_sizes = layout.columns |> calc_sizes(width, _)
-  let row_sizes = layout.rows |> calc_sizes(height, _)
+pub fn layout(layout: Layout(msg), pos: Pos) -> List(#(Node(msg), Pos)) {
+  let col_sizes = layout.columns |> calc_sizes(pos.width, _)
+  let row_sizes = layout.rows |> calc_sizes(pos.height, _)
   layout.cells
   |> list.map(fn(cell) {
     let #(x, w) = calc_cell_size(layout.gap, cell.col.0, cell.col.1, col_sizes)
     let #(y, h) = calc_cell_size(layout.gap, cell.row.0, cell.row.1, row_sizes)
-    #(cell.content, Pos(x:, y:, width: w, height: h, align: Left))
+    #(
+      cell.content,
+      Pos(x: pos.x + x, y: pos.y + y, width: w, height: h, align: Left),
+    )
   })
 }
 
-fn calc_cell_size(gap: Int, from: Int, to: Int, of: List(Int)) {
+fn calc_cell_size(gap: Int, from: Int, to: Int, of: List(Int)) -> #(Int, Int) {
   list.index_fold(of, #(1, 0), fn(acc, item, idx) {
     case idx {
       x if x >= from && x <= to -> #(acc.0, acc.1 + item)
@@ -54,7 +53,7 @@ fn calc_cell_size(gap: Int, from: Int, to: Int, of: List(Int)) {
   })
 }
 
-fn calc_sizes(max: Int, sizes: List(Size)) {
+fn calc_sizes(max: Int, sizes: List(Size)) -> List(Int) {
   let first =
     list.map(sizes, fn(size) {
       case size {
@@ -497,7 +496,7 @@ fn do_list_focusable(
           do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
         }
         Layouts(l) -> {
-          layout(l, pos.width, pos.height)
+          layout(l, pos)
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
           |> list.flatten
         }
@@ -732,7 +731,7 @@ fn render_node(
 ) -> Option(Element) {
   case node {
     Layouts(l) -> {
-      layout(l, pos.width, pos.height)
+      layout(l, pos)
       |> list.map(fn(i) {
         let cursor = c(SetPos({ i.1 }.y, { i.1 }.x))
         render_node(state, i.0, last_input, i.1)
