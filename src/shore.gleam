@@ -378,7 +378,7 @@ fn detect_event(
     Button(..) -> None
     KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
-    Aligned(node:, ..) -> detect_event(state, node, input)
+    Aligned(node:, ..) | Bar2(node:, ..) -> detect_event(state, node, input)
     DivRow(children:) | DivCol(children:) | Box(children:, ..) ->
       do_detect_event(state, children, input)
     Layouts(layout) ->
@@ -511,6 +511,7 @@ fn do_list_focusable(
         Aligned(..)
         | BR
         | Bar(..)
+        | Bar2(..)
         | Button(..)
         | Debug
         | HR
@@ -849,6 +850,20 @@ fn render_node(
       |> string.join("")
       |> Element(width: pos.width, height: 1)
       |> Some
+    Bar2(color, node) -> {
+      let bar =
+        [
+          c(SavePos),
+          c(Reset),
+          c(Bg(color)),
+          string.repeat(" ", pos.width),
+          c(Reset),
+          c(LoadPos),
+        ]
+        |> string.join("")
+      render_node(state, node, last_input, pos)
+      |> option.map(element_prefix(_, bar))
+    }
     BR -> "\n" |> Element(width: pos.width, height: 1) |> Some
     Progress(width:, max:, value:, color:) -> {
       let width = calc_size(width, pos.width)
@@ -882,6 +897,7 @@ pub type Node(msg) {
   HR2(color: Color)
   /// A row with a background color
   Bar(color: Color)
+  Bar2(color: Color, node: Node(msg))
   /// An empty line
   BR
   /// A text string
