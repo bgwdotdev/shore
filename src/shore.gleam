@@ -1224,14 +1224,14 @@ type TableAttr {
 fn draw_table(width: Int, values: List(List(String))) -> Element {
   let col_count =
     values |> list.first |> result.map(list.length) |> result.unwrap(1)
-  let col_width = { width - 2 } / col_count
+  let col_width = { width } / col_count
   let col_left_over = width - col_width * col_count
   let row_count = values |> list.length
   let row_height = 1
   let table = TableAttr(width:, col_count:, col_width:, row_count:, row_height:)
 
   let top = ["╭", string.repeat("─", table.width), "╮"] |> string.join("")
-  let start = c(MoveLeft(width + 2)) <> c(MoveDown(1))
+  let start = c(MoveLeft(width)) <> c(MoveDown(1))
   let row = fn(row, idx) {
     list.map(row, fn(col) {
       case string.length(col) {
@@ -1243,21 +1243,19 @@ fn draw_table(width: Int, values: List(List(String))) -> Element {
     |> fn(row) {
       case idx {
         0 ->
-          "│"
-          <> c(SGR(Bold))
+          c(SGR(Bold))
           <> c(Fg(Blue))
           <> row
           <> c(Reset)
           <> c(MoveRight(col_left_over))
-          <> "│"
           <> start
-        _ -> "│" <> row <> c(MoveRight(col_left_over)) <> "│" <> start
+        _ -> row <> c(MoveRight(col_left_over)) <> start
       }
     }
   }
   let rows = values |> list.index_map(row) |> string.join("")
   let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
-  [c(Reset), top, start, rows, bottom, start]
+  [c(Reset), rows]
   |> string.join("")
   |> Element(width:, height: row_count + 2)
 }
