@@ -394,6 +394,7 @@ fn detect_event(
     | BR
     | Progress(..)
     | Table(..)
+    | TableKV(..)
     | Text(..)
     | TextMulti(..)
     | Debug -> None
@@ -519,6 +520,7 @@ fn do_list_focusable(
         | KeyBind(..)
         | Progress(..)
         | Table(..)
+        | TableKV(..)
         | Text(..)
         | TextMulti(..) -> do_list_focusable(pos, xs, acc)
       }
@@ -796,6 +798,9 @@ fn render_node(
     }
     Table(width:, table:) ->
       draw_table(int.min(width, pos.width), table) |> Some
+    TableKV(width:, table:) ->
+      draw_table_kv(int.min(width, pos.width), table) |> Some
+
     Button(text, input, _) ->
       draw_btn(Btn(pos.width, 1, "", text, last_input == input, pos.align))
       |> Some
@@ -918,6 +923,9 @@ pub type Node(msg) {
   Box(children: List(Node(msg)), title: Option(String))
   /// A table layout
   Table(width: Int, table: List(List(String)))
+  /// A Key-Value style table layout
+  TableKV(width: Int, table: List(List(String)))
+  /// Prints some positional information for developer debugging
   Debug
   // progress bar
   Progress(width: Size, max: Int, value: Int, color: Color)
@@ -1254,6 +1262,38 @@ fn draw_table(width: Int, values: List(List(String))) -> Element {
     }
   }
   let rows = values |> list.index_map(row) |> string.join("")
+  let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
+  [c(Reset), rows]
+  |> string.join("")
+  |> Element(width:, height: row_count + 2)
+}
+
+fn draw_table_kv(width: Int, values: List(List(String))) -> Element {
+  let col_count =
+    values |> list.first |> result.map(list.length) |> result.unwrap(1)
+  let col_width = { width } / col_count
+  let col_left_over = width - col_width * col_count
+  let row_count = values |> list.length
+  let row_height = 1
+  let table = TableAttr(width:, col_count:, col_width:, row_count:, row_height:)
+
+  let top = ["╭", string.repeat("─", table.width), "╮"] |> string.join("")
+  let start = c(MoveLeft(width)) <> c(MoveDown(1))
+  let row = fn(row) {
+    list.index_map(row, fn(col, idx) {
+      let trim = case string.length(col) {
+        x if x >= col_width -> string.slice(col, 0, col_width - 3) <> ".. "
+        x -> col <> c(MoveRight(col_width - x))
+      }
+      case idx {
+        0 -> c(SGR(Bold)) <> c(Fg(Blue)) <> trim <> c(Reset)
+        _ -> trim
+      }
+    })
+    |> string.join("")
+    |> fn(row) { row <> c(MoveRight(col_left_over)) <> start }
+  }
+  let rows = values |> list.map(row) |> string.join("")
   let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
   [c(Reset), rows]
   |> string.join("")
