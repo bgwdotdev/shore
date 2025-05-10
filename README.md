@@ -72,30 +72,22 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.Div(
-    [
-      shore.TextMulti(
-        "keybinds
+  shore.DivCol([
+    shore.TextMulti(
+      "keybinds
 
 i: increments
 d: decrements
 ctrl+x: exits
       ",
-        None,
-        None,
-      ),
-      shore.Text(int.to_string(model.counter), None, None),
-      shore.Div(
-        [
-          shore.Button("increment", key.Char("i"), Increment),
-          shore.Button("decrement", key.Char("d"), Decrement),
-        ],
-        shore.Row,
-      ),
-    ],
-    shore.Col,
-  )
+      None,
+      None,
+    ),
+    shore.Text(int.to_string(model.counter), None, None),
+    shore.DivRow([
+      shore.Button("increment", key.Char("i"), Increment),
+      shore.Button("decrement", key.Char("d"), Decrement),
+    ]),
+  ])
 }
 ```
-
-
