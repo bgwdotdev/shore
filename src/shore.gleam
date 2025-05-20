@@ -796,11 +796,16 @@ fn render_node(
       |> element_join(sep(In))
       |> Some
     }
-    Table(width:, table:) ->
-      draw_table(int.min(width, pos.width), table) |> Some
+    Table(width:, table:) -> draw_table(width, table, pos) |> Some
     TableKV(width:, table:) ->
-      draw_table_kv(int.min(width, pos.width), table) |> Some
-
+      draw_table_kv(int.min(width, pos.width), table, pos) |> Some
+    Graph(width:, height:, points:) ->
+      draw_graph(
+        calc_size(width, pos.width),
+        calc_size(height, pos.height),
+        points,
+      )
+      |> Some
     Button(text, input, _) ->
       draw_btn(Btn(pos.width, 1, "", text, last_input == input, pos.align))
       |> Some
@@ -1219,26 +1224,15 @@ fn draw_progress(
   |> Element(width:, height: 1)
 }
 
-type TableAttr {
-  TableAttr(
-    width: Int,
-    col_count: Int,
-    row_count: Int,
-    col_width: Int,
-    row_height: Int,
-  )
-}
-
-fn draw_table(width: Int, values: List(List(String))) -> Element {
+fn draw_table(width: Int, values: List(List(String)), pos: Pos) -> Element {
+  let width = int.min(width, pos.width)
+  let row_count = values |> list.length
+  let height = int.min(row_count, pos.height)
+  let values = list.take(values, height)
   let col_count =
     values |> list.first |> result.map(list.length) |> result.unwrap(1)
-  let col_width = { width } / col_count
+  let col_width = width / col_count
   let col_left_over = width - col_width * col_count
-  let row_count = values |> list.length
-  let row_height = 1
-  let table = TableAttr(width:, col_count:, col_width:, row_count:, row_height:)
-
-  let top = ["╭", string.repeat("─", table.width), "╮"] |> string.join("")
   let start = c(MoveLeft(width)) <> c(MoveDown(1))
   let row = fn(row, idx) {
     list.map(row, fn(col) {
@@ -1262,22 +1256,22 @@ fn draw_table(width: Int, values: List(List(String))) -> Element {
     }
   }
   let rows = values |> list.index_map(row) |> string.join("")
-  let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
-  [c(Reset), rows]
+  let join_offset = [c(MoveUp(1)), c(SavePos)] |> string.join("")
+  [c(Reset), rows, join_offset]
   |> string.join("")
-  |> Element(width:, height: row_count + 2)
+  |> Element(width:, height:)
 }
 
-fn draw_table_kv(width: Int, values: List(List(String))) -> Element {
+fn draw_table_kv(width: Int, values: List(List(String)), pos: Pos) -> Element {
+  let width = int.min(width, pos.width)
+  let row_count = values |> list.length
+  let height = int.min(row_count, pos.height)
+  let values = list.take(values, height)
   let col_count =
     values |> list.first |> result.map(list.length) |> result.unwrap(1)
   let col_width = { width } / col_count
   let col_left_over = width - col_width * col_count
-  let row_count = values |> list.length
-  let row_height = 1
-  let table = TableAttr(width:, col_count:, col_width:, row_count:, row_height:)
 
-  let top = ["╭", string.repeat("─", table.width), "╮"] |> string.join("")
   let start = c(MoveLeft(width)) <> c(MoveDown(1))
   let row = fn(row) {
     list.index_map(row, fn(col, idx) {
@@ -1294,10 +1288,10 @@ fn draw_table_kv(width: Int, values: List(List(String))) -> Element {
     |> fn(row) { row <> c(MoveRight(col_left_over)) <> start }
   }
   let rows = values |> list.map(row) |> string.join("")
-  let bottom = ["╰", string.repeat("─", table.width), "╯"] |> string.join("")
-  [c(Reset), rows]
+  let join_offset = [c(MoveUp(1)), c(SavePos)] |> string.join("")
+  [c(Reset), rows, join_offset]
   |> string.join("")
-  |> Element(width:, height: row_count + 2)
+  |> Element(width:, height:)
 }
 
 //
