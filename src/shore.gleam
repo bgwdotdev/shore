@@ -395,6 +395,7 @@ fn detect_event(
     | Progress(..)
     | Table(..)
     | TableKV(..)
+    | Graph(..)
     | Text(..)
     | TextMulti(..)
     | Debug -> None
@@ -521,6 +522,7 @@ fn do_list_focusable(
         | Progress(..)
         | Table(..)
         | TableKV(..)
+        | Graph(..)
         | Text(..)
         | TextMulti(..) -> do_list_focusable(pos, xs, acc)
       }
@@ -930,6 +932,8 @@ pub type Node(msg) {
   Table(width: Int, table: List(List(String)))
   /// A Key-Value style table layout
   TableKV(width: Int, table: List(List(String)))
+  ///
+  Graph(width: Size, height: Size, points: List(Float))
   /// Prints some positional information for developer debugging
   Debug
   // progress bar
@@ -1292,6 +1296,50 @@ fn draw_table_kv(width: Int, values: List(List(String)), pos: Pos) -> Element {
   [c(Reset), rows, join_offset]
   |> string.join("")
   |> Element(width:, height:)
+}
+
+fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
+  let values = list.take(values, width)
+  let lhs = string.repeat("│" <> c(MoveLeft(1)) <> c(MoveDown(1)), height)
+  let btm = string.repeat("─", width - 1)
+  // TODO: remove assert
+  let content = {
+    use max <- result.map(list.max(values, float.compare))
+    let plot =
+      values
+      |> list.map(fn(value) {
+        let height = height - 1
+        let pct = value /. max *. 100.0
+        let offset = int.to_float(height) *. pct /. 100.0
+        let down = int.to_float(height) -. offset
+        let d = down |> float.round
+        //c(MoveDown(d)) <> value |> float.round |> int.to_string <> c(MoveUp(d))
+        c(MoveDown(d)) <> "•" <> c(MoveUp(d))
+      })
+      |> string.join("")
+    let content =
+      [
+        c(SavePos),
+        lhs,
+        c(MoveUp(1)),
+        "╰",
+        btm,
+        c(LoadPos),
+        c(SavePos),
+        c(MoveRight(1)),
+        plot,
+        c(LoadPos),
+        // offset a div col join
+        c(MoveDown(height - 1)),
+        c(SavePos),
+      ]
+      |> string.join("")
+    Element(width:, height:, content:)
+  }
+  case content {
+    Ok(content) -> content
+    Error(Nil) -> Element(width: 5, height: 1, content: "error finding max")
+  }
 }
 
 //
