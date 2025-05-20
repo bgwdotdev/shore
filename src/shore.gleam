@@ -1343,10 +1343,10 @@ fn c(code: TermCode) -> String {
       esc <> "[" <> int.to_string(x) <> ";" <> int.to_string(y) <> "H"
     SavePos -> esc <> "[s"
     LoadPos -> esc <> "[u"
-    MoveUp(i) -> esc <> "[" <> int.to_string(i) <> "A" |> ignore_zero(i)
-    MoveDown(i) -> esc <> "[" <> int.to_string(i) <> "B" |> ignore_zero(i)
-    MoveLeft(i) -> esc <> "[" <> int.to_string(i) <> "D" |> ignore_zero(i)
-    MoveRight(i) -> esc <> "[" <> int.to_string(i) <> "C" |> ignore_zero(i)
+    MoveUp(i) -> { esc <> "[" <> int.to_string(i) <> "A" } |> ignore_zero(i)
+    MoveDown(i) -> { esc <> "[" <> int.to_string(i) <> "B" } |> ignore_zero(i)
+    MoveLeft(i) -> { esc <> "[" <> int.to_string(i) <> "D" } |> ignore_zero(i)
+    MoveRight(i) -> { esc <> "[" <> int.to_string(i) <> "C" } |> ignore_zero(i)
     StartLine -> Column(1) |> c
     Column(i) -> esc <> "[" <> int.to_string(i) <> "G"
     Fg(color) -> esc <> "[3" <> col(color) <> "m"
