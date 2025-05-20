@@ -91,3 +91,25 @@ ctrl+x: exits
   ])
 }
 ```
+
+## Terminal Support
+
+The following terminal emulators have been tested and are generally supported. It is expected any modern terminal emulator should work.
+
+Shore makes use of the terminal CSI 2026 [Synchronized Output](https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036) to aid smoothing the redrawing experience and also alt buffers. 
+
+- alacritty
+- ghostty
+- wezterm
+- kitty
+- iterm2
+- warp
+- konsole
+- gnome-console
+- st
+- window terminal
+
+## Terminal Known Issues
+
+- Terminal.App (layout issues?)
+- tmux (CSI 2026 issues?)
