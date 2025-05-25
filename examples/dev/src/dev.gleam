@@ -5,19 +5,21 @@ import gleam/option.{None, Some}
 import gleam/pair
 import shore
 import shore/key
+import shore/style
+import shore/ui
 
 // MAIN
 
 pub fn main() {
   let exit = process.new_subject()
   let ui =
-    shore.Spec(
+    shore.spec(
       init:,
       view:,
       update:,
       exit:,
       keybinds: shore.default_keybinds(),
-      redraw: shore.OnUpdate,
+      redraw: shore.on_update(),
     )
     |> shore.start
   //tick(ui)
@@ -25,7 +27,7 @@ pub fn main() {
 }
 
 fn tick(ui: process.Subject(shore.Event(Msg))) {
-  process.send(ui, shore.cmd(Tick))
+  process.send(ui, shore.send(Tick))
   process.sleep(1000)
   tick(ui)
 }
@@ -82,42 +84,42 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.DivCol([
-    "HELLO WORLD" |> shore.Text(None, None),
-    shore.HR,
-    shore.Input("hi:", model.hi, shore.Px(20), SetHi, shore.Simple),
-    shore.BR,
-    model.hi |> shore.Text(None, None),
-    shore.BR,
-    shore.Input("bye:", model.bye, shore.Px(25), SetBye, shore.Simple),
-    shore.BR,
-    model.bye |> shore.Text(None, None),
-    shore.BR,
-    shore.TableKV(50, model.csv),
-    shore.BR,
-    shore.Text("hi", None, None),
-    //shore.Progress(shore.Px(20), 100, model.counter, shore.Blue),
-    shore.BR,
-    model.counter |> int.to_string |> shore.Text(Some(shore.Black), None),
-    model.counter |> int.to_string |> shore.Text(Some(shore.Red), None),
-    model.counter |> int.to_string |> shore.Text(Some(shore.Green), None),
-    model.counter |> int.to_string |> shore.Text(Some(shore.Yellow), None),
-    model.counter |> int.to_string |> shore.Text(Some(shore.Blue), None),
-    model.counter |> int.to_string |> shore.Text(Some(shore.Magenta), None),
-    model.counter |> int.to_string |> shore.Text(Some(shore.Cyan), None),
-    model.counter |> int.to_string |> shore.Text(Some(shore.White), None),
-    shore.BR,
-    shore.DivRow([
-      shore.Button("Increment", key.Char("a"), Increment),
-      shore.Button("Decrement", key.Char("b"), Decrement),
+  ui.col([
+    "HELLO WORLD" |> ui.text,
+    ui.hr(),
+    ui.input("hi:", model.hi, style.Px(20), SetHi),
+    ui.br(),
+    model.hi |> ui.text,
+    ui.br(),
+    ui.input("bye:", model.bye, style.Px(25), SetBye),
+    ui.br(),
+    model.bye |> ui.text,
+    ui.br(),
+    ui.table_kv(style.Px(50), model.csv),
+    ui.br(),
+    ui.text("hi"),
+    //ui.Progress(ui.Px(20), 100, model.counter, ui.Blue),
+    ui.br(),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.Black), None),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.Red), None),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.Green), None),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.Yellow), None),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.Blue), None),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.Magenta), None),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.Cyan), None),
+    model.counter |> int.to_string |> ui.text_styled(Some(style.White), None),
+    ui.br(),
+    ui.row([
+      ui.button("Increment", key.Char("a"), Increment),
+      ui.button("Decrement", key.Char("b"), Decrement),
     ]),
     case model.counter {
-      x if x > 10 && x < 20 -> shore.Button("reset", key.Char("r"), SendReset)
-      x if x > 20 -> shore.Button("dd", key.Char("d"), Set(0))
-      x -> shore.Text("x", Some(shore.Red), None)
+      x if x > 10 && x < 20 -> ui.button("reset", key.Char("r"), SendReset)
+      x if x > 20 -> ui.button("dd", key.Char("d"), Set(0))
+      x -> ui.text_styled("x", Some(style.Red), None)
     },
-    shore.BR,
-    shore.Graph(shore.Px(60), 7, [
+    ui.br(),
+    ui.graph(style.Px(60), style.Px(7), [
       1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
       6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
       1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
@@ -130,7 +132,7 @@ fn view(model: Model) -> shore.Node(Msg) {
       6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
       1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0,
     ]),
-    shore.Text("hi", None, None),
+    ui.text("hi"),
   ])
 }
 

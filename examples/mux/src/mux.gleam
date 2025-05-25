@@ -8,19 +8,22 @@ import gleam/result
 import gleam/string
 import shore
 import shore/key
+import shore/layout
+import shore/style
+import shore/ui
 
 // MAIN
 
 pub fn main() {
   let exit = process.new_subject()
   let _shore =
-    shore.Spec(
+    shore.spec(
       init:,
       update:,
       view:,
       exit:,
-      keybinds: shore.vim_keybinds(),
-      redraw: shore.OnTimer(17),
+      keybinds: shore.default_keybinds(),
+      redraw: shore.on_timer(17),
     )
     |> shore.start
   process.receive_forever(exit)
@@ -220,70 +223,44 @@ fn update_term_cmd(
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.Layouts(
-    shore.Grid(
-      gap: 1,
-      rows: list.repeat(shore.Fill, model.rows + 1),
-      columns: list.repeat(shore.Fill, model.cols + 1),
-      cells: [view_keybinds(model), ..list.map(model.term, view_term_output)],
-    ),
+  layout.grid(
+    gap: 1,
+    rows: list.repeat(style.Fill, model.rows + 1),
+    cols: list.repeat(style.Fill, model.cols + 1),
+    cells: [view_keybinds(model), ..list.map(model.term, view_term_output)],
   )
 }
 
-fn view_keybinds(model: Model) -> shore.Cell(Msg) {
-  shore.Cell(
-    shore.DivRow([
-      shore.KeyBind(key.Enter, SendCommand(model.last_modified)),
-      shore.KeyBind(key.Char("L"), Clear(model.last_modified)),
-      shore.KeyBind(key.Char("H"), CreateSplit(model.last_modified, Horizontal)),
-      shore.KeyBind(key.Char("V"), CreateSplit(model.last_modified, Vertical)),
+fn view_keybinds(model: Model) -> layout.Cell(Msg) {
+  layout.cell(
+    ui.row([
+      ui.keybind(key.Enter, SendCommand(model.last_modified)),
+      ui.keybind(key.Char("L"), Clear(model.last_modified)),
+      ui.keybind(key.Char("H"), CreateSplit(model.last_modified, Horizontal)),
+      ui.keybind(key.Char("V"), CreateSplit(model.last_modified, Vertical)),
     ]),
     #(0, 0),
     #(0, 0),
   )
 }
 
-//fn view_term(term: Term) -> shore.Splits(Msg) {
-//  let #(size, other, split) = case term.term {
-//    Some(term) -> #(
-//      shore.Ratio2(shore.Pct(50), shore.Pct(50)),
-//      view_term(term),
-//      term.split,
-//    )
-//    None -> #(
-//      shore.Ratio2(shore.Pct(100), shore.Pct(10)),
-//      view_none(),
-//      shore.Horizontal,
-//    )
-//  }
-//  shore.Split2(split, size, shore.Split1(view_term_output(term)), other)
-//}
-
-fn view_term_output(term: Term) -> shore.Cell(Msg) {
+fn view_term_output(term: Term) -> layout.Cell(Msg) {
   let prompt =
-    shore.Input(
-      int.to_string(term.id) <> "$",
-      term.cmd,
-      shore.Fill,
-      fn(str) { SetCommand(term.id, str) },
-      shore.Simple,
-    )
+    ui.input(int.to_string(term.id) <> "$", term.cmd, style.Fill, fn(str) {
+      SetCommand(term.id, str)
+    })
   [prompt, ..list.map(term.output, format_output)]
   |> list.reverse
-  |> shore.Box(term.id |> int.to_string |> Some)
-  |> shore.Cell(term.row, term.col)
+  |> ui.box(term.id |> int.to_string |> Some)
+  |> layout.cell(term.row, term.col)
 }
-
-//fn view_none() -> shore.Splits(Msg) {
-//  shore.Split1(shore.Div([], shore.Col))
-//}
 
 fn format_output(output: Output) -> shore.Node(Msg) {
   let out =
     "> " <> string.trim(output.cmd) <> "\n" <> string.trim(output.text) <> "\n"
   case output.status {
-    0 -> shore.TextMulti(out, None, None)
-    _ -> shore.TextMulti(out, Some(shore.Red), None)
+    0 -> ui.text(out)
+    _ -> ui.text_styled(out, Some(style.Red), None)
   }
 }
 
@@ -323,15 +300,16 @@ fn help() -> Output {
     "
 Welcome to mux, a simple terminal multiplexor inspired by tmux!
 
+This is pretty jank.
+
 Keybinds:
-  Q -> quit
+  Ctrl+x -> quit
   H -> create horizontal split
   V -> create vertical split
   D -> delete pane
-  j -> cycle input focus forward
-  k -> cycle input focus back
-  i -> insert mode (normal mode)
-  Esc -> normal mode (insert mode)
+  Tab -> cycle input focus forward
+  Shift+Tab -> cycle input focus back
+  Escape -> clear focus/normal mode
   Enter -> submit command (normal mode)
   "
   Output(status: 0, text:, cmd: "help")

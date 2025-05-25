@@ -7,6 +7,9 @@ import gleam/result
 import gleam/string
 import shore
 import shore/key
+import shore/layout
+import shore/style
+import shore/ui
 import simplifile
 
 // MAIN
@@ -14,13 +17,13 @@ import simplifile
 pub fn main() {
   let exit = process.new_subject()
   let _ =
-    shore.Spec(
+    shore.spec(
       init:,
       update:,
       view:,
       exit:,
       keybinds: shore.default_keybinds(),
-      redraw: shore.OnTimer(17),
+      redraw: shore.on_timer(17),
     )
     |> shore.start
   process.receive_forever(exit)
@@ -195,51 +198,49 @@ fn do_update_read(files: List(File), focused: Int, idx: Int) -> File {
 fn view(model: Model) -> shore.Node(Msg) {
   case model.errors {
     [] -> {
-      shore.Layouts(
-        shore.Grid(
-          gap: 1,
-          rows: [shore.Px(1), shore.Fill],
-          columns: [shore.Pct(30), shore.Fill],
-          cells: [
-            shore.Cell(view_header(model), #(0, 0), #(0, 1)),
-            shore.Cell(view_file_list(model), #(1, 1), #(0, 0)),
-            shore.Cell(view_file_content(model), #(1, 1), #(1, 1)),
-          ],
-        ),
+      layout.grid(
+        gap: 1,
+        rows: [style.Px(1), style.Fill],
+        cols: [style.Pct(30), style.Fill],
+        cells: [
+          layout.cell(view_header(model), #(0, 0), #(0, 1)),
+          layout.cell(view_file_list(model), #(1, 1), #(0, 0)),
+          layout.cell(view_file_content(model), #(1, 1), #(1, 1)),
+        ],
       )
     }
     xs ->
-      shore.DivCol([
-        shore.KeyBind(key.Char("q"), DismissErrors),
+      ui.col([
+        ui.keybind(key.Char("q"), DismissErrors),
         xs
           |> list.map(string.inspect)
           |> string.join("\n")
-          |> shore.TextMulti(Some(shore.Black), Some(shore.Red)),
+          |> ui.text_styled(Some(style.Black), Some(style.Red)),
         model
           |> string.inspect
           |> string.replace("),", ")\n")
-          |> shore.TextMulti(None, None),
+          |> ui.text,
       ])
   }
 }
 
 fn view_header(model: Model) -> shore.Node(Msg) {
-  shore.DivCol([
-    shore.KeyBind(key.Char("k"), Up),
-    shore.KeyBind(key.Char("j"), Down),
-    shore.KeyBind(key.Char("l"), Open),
-    shore.KeyBind(key.Char("h"), Back),
+  ui.col([
+    ui.keybind(key.Char("k"), Up),
+    ui.keybind(key.Char("j"), Down),
+    ui.keybind(key.Char("l"), Open),
+    ui.keybind(key.Char("h"), Back),
     model.work_dir
       |> list.reverse
       |> string.join("/")
       |> string.replace("//", "/")
-      |> shore.Text(None, None),
-    shore.HR,
+      |> ui.text,
+    ui.hr(),
   ])
 }
 
 fn view_file_list(model: Model) -> shore.Node(Msg) {
-  shore.Box(
+  ui.box(
     model.files
       |> sort_files
       |> list.index_map(fn(f, i) { view_file(f, i, model.focused) }),
@@ -248,21 +249,21 @@ fn view_file_list(model: Model) -> shore.Node(Msg) {
 }
 
 fn view_file_content(model: Model) -> shore.Node(Msg) {
-  shore.Box([model.content |> shore.TextMulti(None, None)], Some("preview"))
+  ui.box([model.content |> ui.text], Some("preview"))
 }
 
 fn view_file(file: File, idx: Int, focused: Int) -> shore.Node(msg) {
   let color = case file.type_ {
-    simplifile.Directory -> Some(shore.Blue)
-    simplifile.File -> Some(shore.White)
-    simplifile.Symlink -> Some(shore.Red)
-    simplifile.Other -> Some(shore.Yellow)
+    simplifile.Directory -> Some(style.Blue)
+    simplifile.File -> Some(style.White)
+    simplifile.Symlink -> Some(style.Red)
+    simplifile.Other -> Some(style.Yellow)
   }
   let #(fg, bg) = case idx == focused {
-    True -> #(Some(shore.Black), color)
+    True -> #(Some(style.Black), color)
     False -> #(color, None)
   }
-  file.name |> shore.Text(fg, bg)
+  file.name |> ui.text_styled(fg, bg)
 }
 
 // CMD

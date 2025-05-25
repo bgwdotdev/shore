@@ -5,19 +5,20 @@ import gleam/int
 import gleam/option.{None, Some}
 import shore
 import shore/key
+import shore/ui
 
 // MAIN
 
 pub fn main() {
   let exit = process.new_subject()
   let assert Ok(_actor) =
-    shore.Spec(
+    shore.spec(
       init:,
       update:,
       view:,
       exit:,
       keybinds: shore.default_keybinds(),
-      redraw: shore.OnTimer(16),
+      redraw: shore.on_timer(16),
     )
     |> shore.start
   exit |> process.receive_forever
@@ -52,21 +53,19 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.DivCol([
-    shore.TextMulti(
+  ui.col([
+    ui.text(
       "keybinds
 
 i: increments
 d: decrements
 ctrl+x: exits
       ",
-      None,
-      None,
     ),
-    shore.Text(int.to_string(model.counter), None, None),
-    shore.DivRow([
-      shore.Button("increment", key.Char("i"), Increment),
-      shore.Button("decrement", key.Char("d"), Decrement),
+    ui.text(int.to_string(model.counter)),
+    ui.row([
+      ui.button("increment", key.Char("i"), Increment),
+      ui.button("decrement", key.Char("d"), Decrement),
     ]),
   ])
 }
