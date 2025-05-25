@@ -502,7 +502,7 @@ fn do_list_focusable(
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
           |> list.flatten
         }
-        Input(label, value, width, event, ..) -> {
+        Input(label, value, width, event) -> {
           let cursor = string.length(value)
           let width = calc_size_input(width, pos.width, label)
           let focused =
@@ -812,31 +812,17 @@ fn render_node(
       draw_btn(Btn(pos.width, 1, "", text, last_input == input, pos.align))
       |> Some
     KeyBind(..) -> None
-    Input(label, value, width, _event, style) -> {
+    Input(label, value, width, _event) -> {
       let width = calc_size_input(width, pos.width, label)
       let #(is_focused, cursor) = case state.focused {
         Some(focused) if focused.label == label -> #(True, focused.cursor)
         _ -> #(False, string.length(value))
       }
-      let is_insert = case state.mode {
-        Insert -> True
-        _ -> False
-      }
       let offset = case state.focused {
         Some(focused) if focused.label == label -> focused.offset
         _ -> input_offset(string.length(value), 0, width)
       }
-      draw_input(Iput(
-        width,
-        1,
-        label,
-        value,
-        is_focused,
-        is_insert,
-        cursor,
-        offset,
-        style,
-      ))
+      draw_input(Iput(width, 1, label, value, is_focused, cursor, offset))
       |> Some
     }
     Text(text, fg, bg) -> draw_text(text, fg, bg, pos) |> Some
@@ -897,13 +883,7 @@ fn sep(separator: Separator) -> String {
 
 pub type Node(msg) {
   /// A field for text input
-  Input(
-    label: String,
-    value: String,
-    width: Size,
-    event: fn(String) -> msg,
-    style: Style,
-  )
+  Input(label: String, value: String, width: Size, event: fn(String) -> msg)
   /// A horizontal line
   HR
   HR2(color: Color)
@@ -964,11 +944,6 @@ pub type Separator {
   Row
   Col
   In
-}
-
-pub type Style {
-  Simple
-  Border
 }
 
 pub type Align {
@@ -1064,23 +1039,19 @@ type Iput {
     title: String,
     text: String,
     pressed: Bool,
-    insert: Bool,
     cursor: Int,
     offset: Int,
-    style: Style,
   )
 }
 
 fn draw_input(btn: Iput) -> Element {
   // 2 == padding of space either side
-  let color = case btn.pressed, btn.insert {
-    True, True -> Green |> Fg |> c
-    True, False -> Blue |> Fg |> c
-    _, _ -> White |> Fg |> c
+  let color = case btn.pressed {
+    True -> Green |> Fg |> c
+    False -> Blue |> Fg |> c
   }
   let in_width = btn.width - 2
   let text = btn.text <> " "
-  let padding = in_width - string.length(text)
   let text_trim =
     text
     |> string.slice(btn.offset, in_width)
@@ -1090,47 +1061,9 @@ fn draw_input(btn: Iput) -> Element {
         False -> x
       }
     }
-  let top = case string.length(btn.title) {
-    0 -> fn() { ["╭", string.repeat("─", btn.width), "╮"] |> string.join("") }
-    _ -> fn() {
-      [
-        "╭",
-        "─",
-        " ",
-        btn.title,
-        " ",
-        string.repeat("─", btn.width - 3 - string.length(btn.title)),
-        "╮",
-      ]
-      |> string.join("")
-    }
-  }
-  let middle = fn() {
-    [
-      "│",
-      " ",
-      c(Reset),
-      text_trim,
-      string.repeat(" ", padding),
-      color,
-      " ",
-      "│",
-    ]
-    |> string.join("")
-  }
-  let bottom = fn() {
-    ["╰", string.repeat("─", btn.width), "╯"] |> string.join("")
-  }
-  let width = btn.width + 2
-  let start = c(MoveLeft(width)) <> c(MoveDown(1))
-  let top_right = c(MoveUp(1 + btn.height))
 
-  case btn.style {
-    Simple -> [color, btn.title, " ", c(Reset), text_trim] |> string.join("")
-    Border ->
-      [color, top(), start, middle(), start, bottom(), top_right, Reset |> c]
-      |> string.join("")
-  }
+  [color, btn.title, " ", c(Reset), text_trim]
+  |> string.join("")
   |> Element(width: btn.width, height: btn.height)
 }
 
