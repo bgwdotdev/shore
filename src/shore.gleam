@@ -1,4 +1,3 @@
-import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process.{type Subject}
 import gleam/float
 import gleam/function
@@ -7,110 +6,9 @@ import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
-import gleam/pair
 import gleam/result
 import gleam/string
 import shore/key.{type Key}
-
-//
-// LAYOUT
-//
-
-pub type Layout(msg) {
-  Grid(gap: Int, rows: List(Size), columns: List(Size), cells: List(Cell(msg)))
-}
-
-pub type Cell(msg) {
-  Cell(content: Node(msg), row: #(Int, Int), col: #(Int, Int))
-}
-
-pub fn layout(layout: Layout(msg), pos: Pos) -> List(#(Node(msg), Pos)) {
-  let col_sizes = layout.columns |> calc_sizes(pos.width, _)
-  let row_sizes = layout.rows |> calc_sizes(pos.height, _)
-  layout.cells
-  |> list.map(fn(cell) {
-    let #(x, w) = calc_cell_size(layout.gap, cell.col.0, cell.col.1, col_sizes)
-    let #(y, h) = calc_cell_size(layout.gap, cell.row.0, cell.row.1, row_sizes)
-    #(
-      cell.content,
-      Pos(x: pos.x + x, y: pos.y + y, width: w, height: h, align: Left),
-    )
-  })
-}
-
-fn calc_cell_size(gap: Int, from: Int, to: Int, of: List(Int)) -> #(Int, Int) {
-  list.index_fold(of, #(1, 0), fn(acc, item, idx) {
-    case idx {
-      x if x >= from && x <= to -> #(acc.0, acc.1 + item)
-      x if x == from - 1 -> #(acc.0 + gap + item, acc.1 - gap)
-      x if x < from -> #(acc.0 + item, acc.1)
-      _ -> acc
-    }
-  })
-}
-
-fn calc_sizes(max: Int, sizes: List(Size)) -> List(Int) {
-  let first =
-    list.map(sizes, fn(size) {
-      case size {
-        Px(px) -> Some(px)
-        Pct(pct) -> Some(max * pct / 100)
-        Fill -> None
-      }
-    })
-  let total_known_size =
-    list.fold(first, 0, fn(acc, i) {
-      case i {
-        Some(px) -> acc + px
-        None -> acc
-      }
-    })
-  let total_unknown_count = first |> list.filter(option.is_none) |> list.length
-  let remainder = max - total_known_size
-  let remainder_split = remainder / total_unknown_count
-  let round_up = remainder - remainder_split * total_unknown_count
-  do_calc_sizes(first, remainder_split, round_up, [])
-}
-
-fn do_calc_sizes(
-  sizes: List(Option(Int)),
-  remainder_split: Int,
-  round_up: Int,
-  acc: List(Int),
-) -> List(Int) {
-  case sizes {
-    [] -> list.reverse(acc)
-    [x, ..xs] ->
-      case x {
-        Some(px) ->
-          [px, ..acc] |> do_calc_sizes(xs, remainder_split, round_up, _)
-        None ->
-          [remainder_split + round_up, ..acc]
-          |> do_calc_sizes(xs, remainder_split, 0, _)
-      }
-  }
-}
-
-//
-// LAYOUT HELPER
-//
-
-pub fn layout_center(
-  content: Node(msg),
-  width: Size,
-  height: Size,
-) -> Layout(msg) {
-  Grid(gap: 0, rows: [Fill, height, Fill], columns: [Fill, width, Fill], cells: [
-    Cell(content:, row: #(1, 1), col: #(1, 1)),
-  ])
-}
-
-pub fn layout_split(left: Node(msg), right: Node(msg)) -> Layout(msg) {
-  Grid(gap: 0, rows: [Pct(100)], columns: [Pct(50), Fill], cells: [
-    Cell(content: left, row: #(0, 0), col: #(0, 0)),
-    Cell(content: right, row: #(0, 0), col: #(1, 1)),
-  ])
-}
 
 //
 // INIT
@@ -1299,6 +1197,106 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
     Ok(content) -> content
     Error(Nil) -> Element(width: 5, height: 1, content: "error finding max")
   }
+}
+
+//
+// LAYOUT
+//
+
+pub type Layout(msg) {
+  Grid(gap: Int, rows: List(Size), columns: List(Size), cells: List(Cell(msg)))
+}
+
+pub type Cell(msg) {
+  Cell(content: Node(msg), row: #(Int, Int), col: #(Int, Int))
+}
+
+pub fn layout(layout: Layout(msg), pos: Pos) -> List(#(Node(msg), Pos)) {
+  let col_sizes = layout.columns |> calc_sizes(pos.width, _)
+  let row_sizes = layout.rows |> calc_sizes(pos.height, _)
+  layout.cells
+  |> list.map(fn(cell) {
+    let #(x, w) = calc_cell_size(layout.gap, cell.col.0, cell.col.1, col_sizes)
+    let #(y, h) = calc_cell_size(layout.gap, cell.row.0, cell.row.1, row_sizes)
+    #(
+      cell.content,
+      Pos(x: pos.x + x, y: pos.y + y, width: w, height: h, align: Left),
+    )
+  })
+}
+
+fn calc_cell_size(gap: Int, from: Int, to: Int, of: List(Int)) -> #(Int, Int) {
+  list.index_fold(of, #(1, 0), fn(acc, item, idx) {
+    case idx {
+      x if x >= from && x <= to -> #(acc.0, acc.1 + item)
+      x if x == from - 1 -> #(acc.0 + gap + item, acc.1 - gap)
+      x if x < from -> #(acc.0 + item, acc.1)
+      _ -> acc
+    }
+  })
+}
+
+fn calc_sizes(max: Int, sizes: List(Size)) -> List(Int) {
+  let first =
+    list.map(sizes, fn(size) {
+      case size {
+        Px(px) -> Some(px)
+        Pct(pct) -> Some(max * pct / 100)
+        Fill -> None
+      }
+    })
+  let total_known_size =
+    list.fold(first, 0, fn(acc, i) {
+      case i {
+        Some(px) -> acc + px
+        None -> acc
+      }
+    })
+  let total_unknown_count = first |> list.filter(option.is_none) |> list.length
+  let remainder = max - total_known_size
+  let remainder_split = remainder / total_unknown_count
+  let round_up = remainder - remainder_split * total_unknown_count
+  do_calc_sizes(first, remainder_split, round_up, [])
+}
+
+fn do_calc_sizes(
+  sizes: List(Option(Int)),
+  remainder_split: Int,
+  round_up: Int,
+  acc: List(Int),
+) -> List(Int) {
+  case sizes {
+    [] -> list.reverse(acc)
+    [x, ..xs] ->
+      case x {
+        Some(px) ->
+          [px, ..acc] |> do_calc_sizes(xs, remainder_split, round_up, _)
+        None ->
+          [remainder_split + round_up, ..acc]
+          |> do_calc_sizes(xs, remainder_split, 0, _)
+      }
+  }
+}
+
+//
+// LAYOUT HELPER
+//
+
+pub fn layout_center(
+  content: Node(msg),
+  width: Size,
+  height: Size,
+) -> Layout(msg) {
+  Grid(gap: 0, rows: [Fill, height, Fill], columns: [Fill, width, Fill], cells: [
+    Cell(content:, row: #(1, 1), col: #(1, 1)),
+  ])
+}
+
+pub fn layout_split(left: Node(msg), right: Node(msg)) -> Layout(msg) {
+  Grid(gap: 0, rows: [Pct(100)], columns: [Pct(50), Fill], cells: [
+    Cell(content: left, row: #(0, 0), col: #(0, 0)),
+    Cell(content: right, row: #(0, 0), col: #(1, 1)),
+  ])
 }
 
 //
