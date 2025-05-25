@@ -1,3 +1,4 @@
+import gleam/erlang/atom
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process.{type Subject}
 import gleam/float
@@ -362,9 +363,10 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
 }
 
 fn update_viewport(state: State(model, msg)) -> State(model, msg) {
-  let assert Ok(width) = terminal_columns()
-  let assert Ok(height) = terminal_rows()
-  State(..state, width:, height:)
+  //let assert Ok(width) = terminal_columns()
+  //let assert Ok(height) = terminal_rows()
+  //State(..state, width:, height:)
+  state
 }
 
 // TDOO: fix to be tail call recursive?
@@ -714,18 +716,44 @@ pub type Pos {
   Pos(x: Int, y: Int, width: Int, height: Int, align: Align)
 }
 
-fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
+@external(erlang, "erlang", "send")
+fn raw_send(a: process.Pid, b: String) -> Nil
+
+fn render(state: State(model, msg), node: Node(msg), last_input: Key) -> Nil {
   let pos = Pos(0, 0, state.width, state.height, Left)
-  c(BSU) |> io.print
-  {
-    c(Clear)
-    <> node
-    |> render_node(state, _, last_input, pos)
-    |> option.map(fn(r) { r.content })
-    |> option.unwrap("")
+  let ssh = process.named("shoressh" |> atom.create_from_string)
+
+  case ssh {
+    Ok(pid) -> {
+      c(BSU)
+      |> raw_send(pid, _)
+      {
+        c(Clear)
+        <> node
+        |> render_node(state, _, last_input, pos)
+        |> option.map(fn(r) { r.content })
+        |> option.unwrap("")
+      }
+      |> raw_send(pid, _)
+
+      c(ESU)
+      |> raw_send(pid, _)
+      Nil
+    }
+    Error(Nil) -> {
+      Nil
+      //c(BSU) |> io.print
+      //{
+      //  c(Clear)
+      //  <> node
+      //  |> render_node(state, _, last_input, pos)
+      //  |> option.map(fn(r) { r.content })
+      //  |> option.unwrap("")
+      //}
+      //|> io.print
+      //c(ESU) |> io.print
+    }
   }
-  |> io.print
-  c(ESU) |> io.print
 }
 
 fn render_node(
