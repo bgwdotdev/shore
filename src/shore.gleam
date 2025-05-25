@@ -309,7 +309,7 @@ fn detect_event(
     KeyBind(key, event) if input == key -> Some(event)
     KeyBind(..) -> None
     Aligned(node:, ..) | Bar2(node:, ..) -> detect_event(state, node, input)
-    DivRow(children:) | DivCol(children:) | Box(children:, ..) ->
+    Row(children:) | Col(children:) | Box(children:, ..) ->
       do_detect_event(state, children, input)
     Layouts(layout) ->
       layout.cells
@@ -421,7 +421,7 @@ fn do_list_focusable(
     [] -> acc
     [x, ..xs] ->
       case x {
-        DivRow(children) | DivCol(children) ->
+        Row(children) | Col(children) ->
           do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
         Box(children:, ..) -> {
           let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
@@ -702,7 +702,7 @@ fn render_node(
     }
     Aligned(align, node) ->
       render_node(state, node, last_input, Pos(..pos, align:))
-    DivRow(children) -> {
+    Row(children) -> {
       let len = children |> list.length
       let width = pos.width / len
       list.index_map(children, fn(child, idx) {
@@ -718,7 +718,7 @@ fn render_node(
         })
       })
       |> option.values
-      |> element_join(sep(Row))
+      |> element_join(sep(SepRow))
       |> fn(ele) {
         case pos.align {
           Right -> c(MoveRight(pos.width - ele.width - { len - 1 }))
@@ -728,10 +728,10 @@ fn render_node(
       }
       |> Some
     }
-    DivCol(children) -> {
+    Col(children) -> {
       list.map(children, render_node(state, _, last_input, pos))
       |> option.values
-      |> element_join(sep(Col))
+      |> element_join(sep(SepCol))
       |> element_prefix(c(SavePos))
       |> Some
     }
@@ -744,7 +744,7 @@ fn render_node(
         ..list.map(children, render_node(state, _, last_input, pos_child))
         |> option.values
       ]
-      |> element_join(sep(In))
+      |> element_join(sep(SepCol))
       |> Some
     }
     Table(width:, table:) -> draw_table(width, table, pos) |> Some
@@ -837,8 +837,8 @@ fn render_node(
 
 fn sep(separator: Separator) -> String {
   case separator {
-    Row -> c(MoveRight(1))
-    Col | In -> c(LoadPos) <> c(MoveDown(1)) <> c(SavePos)
+    SepRow -> c(MoveRight(1))
+    SepCol -> c(LoadPos) <> c(MoveDown(1)) <> c(SavePos)
   }
 }
 
@@ -871,9 +871,9 @@ pub type Node(msg) {
   /// Sets alignment of all child nodes
   Aligned(align: Align, node: Node(msg))
   /// A container element for holding other nodes over multiple lines
-  DivCol(children: List(Node(msg)))
+  Col(children: List(Node(msg)))
   /// A container element for holding other nodes in a single line
-  DivRow(children: List(Node(msg)))
+  Row(children: List(Node(msg)))
   /// A box container element for holding other nodes
   Box(children: List(Node(msg)), title: Option(String))
   /// A table layout
@@ -915,9 +915,8 @@ fn calc_size_input(size: Size, width: Int, label: String) -> Int {
 }
 
 type Separator {
-  Row
-  Col
-  In
+  SepRow
+  SepCol
 }
 
 /// Used to set all children of `Aligned` to the selected alignment.
