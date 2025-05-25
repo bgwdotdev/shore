@@ -12,10 +12,6 @@ import gleam/result
 import gleam/string
 import shore/key.{type Key}
 
-pub fn main() {
-  io.print(c(MoveRight(0)) <> "a")
-}
-
 //
 // LAYOUT
 //
@@ -144,29 +140,27 @@ type State(model, msg) {
 }
 
 pub type Keybinds {
-  Keybinds(exit: Key, focus_clear: Key, focus_next: Key, focus_prev: Key)
+  Keybinds(
+    exit: Key,
+    submit: Key,
+    focus_clear: Key,
+    focus_next: Key,
+    focus_prev: Key,
+  )
 }
 
 pub fn default_keybinds() -> Keybinds {
   Keybinds(
     exit: key.Ctrl("X"),
+    submit: key.Enter,
     focus_clear: key.Esc,
     focus_next: key.Tab,
     focus_prev: key.BackTab,
   )
 }
 
-pub fn vim_keybinds() -> Keybinds {
-  Keybinds(
-    exit: key.Char("Q"),
-    focus_clear: key.Esc,
-    focus_next: key.Char("j"),
-    focus_prev: key.Char("k"),
-  )
-}
-
 type Focused(msg) {
-  Focused(
+  FocusedInput(
     label: String,
     value: String,
     event: fn(String) -> msg,
@@ -174,6 +168,7 @@ type Focused(msg) {
     offset: Int,
     width: Int,
   )
+  FocusedButton(label: String, event: msg)
 }
 
 pub fn start(
@@ -263,6 +258,65 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
     }
     KeyPress(input) -> {
       let ui = state.spec.view(state.model)
+      let state = case state.focused {
+        None -> {
+          let state = {
+            let model = case detect_event(state, ui, input) {
+              Some(msg) -> {
+                let #(model, tasks) = state.spec.update(state.model, msg)
+                tasks |> task_handler(state.tasks)
+                model
+              }
+              None -> state.model
+            }
+            State(..state, model:)
+          }
+
+          // render
+          let state = update_viewport(state)
+          redraw_on_update(state, input)
+          state
+        }
+        Some(focused) -> {
+          let reload = list_focusable([ui], state) |> focus_current(focused)
+          case reload {
+            Some(focused) -> {
+              case input_handler(focused, input) {
+                FocusedInput(..) as focused -> {
+                  let #(model, tasks) =
+                    state.spec.update(state.model, focused.event(focused.value))
+                  tasks |> task_handler(state.tasks)
+                  let state = State(..state, focused: Some(focused), model:)
+                  let state = update_viewport(state)
+                  redraw_on_update(state, input)
+                  state
+                }
+                FocusedButton(..) as focused -> {
+                  case input == state.spec.keybinds.submit {
+                    True -> {
+                      let #(model, tasks) =
+                        state.spec.update(state.model, focused.event)
+                      tasks |> task_handler(state.tasks)
+                      let state = State(..state, focused: Some(focused), model:)
+                      let state = update_viewport(state)
+                      redraw_on_update(state, input)
+                      state
+                    }
+                    False -> state
+                  }
+                }
+              }
+            }
+            // Element has disappeared from screen for reasons
+            None -> {
+              let state = State(..state, focused: None)
+              let state = update_viewport(state)
+              redraw_on_update(state, input)
+              state
+            }
+          }
+        }
+      }
       let state = case control_event(input, state.spec.keybinds) {
         Some(FocusClear) -> State(..state, focused: None)
         Some(FocusPrev) -> {
@@ -283,49 +337,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
         }
         None -> state
       }
-      case state.focused {
-        None -> {
-          // pass the key event onto the application as well
-          let state = {
-            let model = case detect_event(state, ui, input) {
-              Some(msg) -> {
-                let #(model, tasks) = state.spec.update(state.model, msg)
-                tasks |> task_handler(state.tasks)
-                model
-              }
-              None -> state.model
-            }
-            State(..state, model:)
-          }
-
-          // render
-          let state = update_viewport(state)
-          redraw_on_update(state, input)
-          actor.continue(state)
-        }
-        Some(focused) -> {
-          let reload = list_focusable([ui], state) |> focus_current(focused)
-          case reload {
-            Some(focused) -> {
-              let focused = input_handler(focused, input)
-              let #(model, tasks) =
-                state.spec.update(state.model, focused.event(focused.value))
-              tasks |> task_handler(state.tasks)
-              let state = State(..state, focused: Some(focused), model:)
-              let state = update_viewport(state)
-              redraw_on_update(state, input)
-              actor.continue(state)
-            }
-            // Element has disappeared from screen for reasons
-            None -> {
-              let state = State(..state, focused: None)
-              let state = update_viewport(state)
-              redraw_on_update(state, input)
-              actor.continue(state)
-            }
-          }
-        }
-      }
+      actor.continue(state)
     }
     Redraw -> {
       let state = update_viewport(state)
@@ -485,15 +497,17 @@ fn do_list_focusable(
           let cursor = string.length(value)
           let width = calc_size_input(width, pos.width, label)
           let focused =
-            Focused(label:, value:, event:, offset: 0, cursor:, width:)
+            FocusedInput(label:, value:, event:, offset: 0, cursor:, width:)
           let offset = input_offset(cursor, focused.offset, focused.width)
-          do_list_focusable(pos, xs, [Focused(..focused, offset:), ..acc])
+          do_list_focusable(pos, xs, [FocusedInput(..focused, offset:), ..acc])
+        }
+        Button(text:, event:, ..) -> {
+          do_list_focusable(pos, xs, [FocusedButton(text, event), ..acc])
         }
         Aligned(..)
         | BR
         | Bar(..)
         | Bar2(..)
-        | Button(..)
         | Debug
         | HR
         | HR2(..)
@@ -541,54 +555,59 @@ fn focus_current(
 // TEXT INPUT
 //
 
-fn input_handler(focused: Focused(msg), input: Key) -> Focused(msg) {
-  case input {
-    key.Backspace -> {
-      let cursor = int.max(0, focused.cursor - 1)
-      let offset = int.max(0, focused.offset - 1)
-      Focused(
-        ..focused,
-        value: focused.value |> string_backspace(focused.cursor, -1),
-        cursor:,
-        offset:,
-      )
-    }
-    //key.Up -> string.drop_end(value, 1)
-    //key.Down -> string.drop_end(value, 1)
-    key.Home -> Focused(..focused, cursor: 0)
-    key.End -> Focused(..focused, cursor: string.length(focused.value))
-    key.Right -> {
-      let cursor = int.min(string.length(focused.value), focused.cursor + 1)
-      let offset = input_offset(cursor, focused.offset, focused.width)
-      Focused(..focused, cursor:, offset:)
-    }
-    key.Left -> {
-      let cursor = int.max(0, focused.cursor - 1)
-      let offset = input_offset(cursor, focused.offset, focused.width)
-      Focused(..focused, cursor:, offset:)
-    }
-    key.Delete -> {
-      let offset = case focused.cursor == string.length(focused.value) {
-        True -> focused.offset
-        False -> int.max(0, focused.offset - 1)
+fn input_handler(focused: Focused(msg), key: Key) -> Focused(msg) {
+  case focused {
+    FocusedInput(..) as focused -> {
+      case key {
+        key.Backspace -> {
+          let cursor = int.max(0, focused.cursor - 1)
+          let offset = int.max(0, focused.offset - 1)
+          FocusedInput(
+            ..focused,
+            value: focused.value |> string_backspace(focused.cursor, -1),
+            cursor:,
+            offset:,
+          )
+        }
+        //key.Up -> string.drop_end(value, 1)
+        //key.Down -> string.drop_end(value, 1)
+        key.Home -> FocusedInput(..focused, cursor: 0)
+        key.End -> FocusedInput(..focused, cursor: string.length(focused.value))
+        key.Right -> {
+          let cursor = int.min(string.length(focused.value), focused.cursor + 1)
+          let offset = input_offset(cursor, focused.offset, focused.width)
+          FocusedInput(..focused, cursor:, offset:)
+        }
+        key.Left -> {
+          let cursor = int.max(0, focused.cursor - 1)
+          let offset = input_offset(cursor, focused.offset, focused.width)
+          FocusedInput(..focused, cursor:, offset:)
+        }
+        key.Delete -> {
+          let offset = case focused.cursor == string.length(focused.value) {
+            True -> focused.offset
+            False -> int.max(0, focused.offset - 1)
+          }
+          FocusedInput(
+            ..focused,
+            value: focused.value |> string_backspace(focused.cursor, 0),
+            offset:,
+          )
+        }
+        key.Char(char) -> {
+          let cursor = focused.cursor + 1
+          let offset = input_offset(cursor, focused.offset, focused.width)
+          FocusedInput(
+            ..focused,
+            value: string_insert(focused.value, focused.cursor, char),
+            cursor:,
+            offset:,
+          )
+        }
+        _ -> focused
       }
-      Focused(
-        ..focused,
-        value: focused.value |> string_backspace(focused.cursor, 0),
-        offset:,
-      )
     }
-    key.Char(char) -> {
-      let cursor = focused.cursor + 1
-      let offset = input_offset(cursor, focused.offset, focused.width)
-      Focused(
-        ..focused,
-        value: string_insert(focused.value, focused.cursor, char),
-        cursor:,
-        offset:,
-      )
-    }
-    _ -> focused
+    FocusedButton(..) as button -> button
   }
 }
 
@@ -799,18 +818,34 @@ fn render_node(
         points,
       )
       |> Some
-    Button(text, input, _) ->
-      draw_btn(Btn(pos.width, 1, "", text, last_input == input, pos.align))
+    Button(text, input, _) -> {
+      let is_focused = case state.focused {
+        Some(FocusedButton(..) as focused) if focused.label == text -> True
+        _ -> False
+      }
+      draw_btn(Btn(
+        pos.width,
+        1,
+        "",
+        text,
+        last_input == input || is_focused,
+        pos.align,
+      ))
       |> Some
+    }
     KeyBind(..) -> None
     Input(label, value, width, _event) -> {
       let width = calc_size_input(width, pos.width, label)
       let #(is_focused, cursor) = case state.focused {
-        Some(focused) if focused.label == label -> #(True, focused.cursor)
+        Some(FocusedInput(..) as focused) if focused.label == label -> #(
+          True,
+          focused.cursor,
+        )
         _ -> #(False, string.length(value))
       }
       let offset = case state.focused {
-        Some(focused) if focused.label == label -> focused.offset
+        Some(FocusedInput(..) as focused) if focused.label == label ->
+          focused.offset
         _ -> input_offset(string.length(value), 0, width)
       }
       draw_input(Iput(width, 1, label, value, is_focused, cursor, offset))
