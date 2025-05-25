@@ -14,7 +14,37 @@ import shore/key.{type Key}
 // INIT
 //
 
+/// A shore application is made up of these base parts. Following The Elm
+/// Architecture, you must define an init, view and update function which shore
+/// will handle calling.
+///
+/// Additionally, a simple subject to pass the exit call to is required.
+/// keybinding for the framework level events such as exiting and ui focusing.
+/// And finally redraw for defining when the applicaiton should be redrawn, either on update messages or on a timer.
+///
 pub type Spec(model, msg) {
+  /// ## Example
+  /// ```
+  /// import gleam/erlang/process
+  /// import shore
+  ///
+  /// pub fn main() {
+  ///   let exit = process.new_subject()
+  ///   let assert Ok(_actor) =
+  ///     shore.Spec(
+  ///       init:,
+  ///       update:,
+  ///       view:,
+  ///       exit:,
+  ///       keybinds: shore.default_keybinds(),
+  ///       redraw: shore.OnTimer(16),
+  ///     )
+  ///     |> shore.start
+  ///   exit |> process.receive_forever
+  /// }
+  ///
+  /// ```
+  ///
   Spec(
     init: fn() -> #(model, List(fn() -> msg)),
     view: fn(model) -> Node(msg),
@@ -37,6 +67,9 @@ type State(model, msg) {
   )
 }
 
+/// Set keybinds for various shore level functions, such as moving between
+/// focusable elements such as input boxes and buttons, as well as exiting and
+/// triggering button events.
 pub type Keybinds {
   Keybinds(
     exit: Key,
@@ -47,6 +80,7 @@ pub type Keybinds {
   )
 }
 
+/// A typical set of keybindings
 pub fn default_keybinds() -> Keybinds {
   Keybinds(
     exit: key.Ctrl("X"),
@@ -129,6 +163,7 @@ fn read_input(shore: Subject(Event(msg)), exit: Key) -> Nil {
 // EVENT
 //
 
+/// Events can be sent to the subject of the shore actor. Use the `cmd` and `exit` functions.
 pub opaque type Event(msg) {
   KeyPress(Key)
   Cmd(msg)
@@ -136,10 +171,16 @@ pub opaque type Event(msg) {
   Exit
 }
 
+/// Allows sending a message to your TUI from another actor. This can be used,
+/// for example, to push an event to your TUI, rather than have it poll.
+///
 pub fn cmd(msg: msg) -> Event(msg) {
   Cmd(msg)
 }
 
+/// Manually trigger the exit for your TUI. Normally this would be handled
+/// through the exit keybind.
+///
 pub fn exit() -> Event(msg) {
   Exit
 }
@@ -805,14 +846,17 @@ fn sep(separator: Separator) -> String {
 // DRAW
 //
 
+/// All UI elements
 pub type Node(msg) {
   /// A field for text input
   Input(label: String, value: String, width: Size, event: fn(String) -> msg)
   /// A horizontal line
   HR
+  /// A colored horizontal line
   HR2(color: Color)
   /// A row with a background color
   Bar(color: Color)
+  /// A row with a background color, containing items
   Bar2(color: Color, node: Node(msg))
   /// An empty line
   BR
@@ -836,19 +880,25 @@ pub type Node(msg) {
   Table(width: Int, table: List(List(String)))
   /// A Key-Value style table layout
   TableKV(width: Int, table: List(List(String)))
-  ///
+  /// An extremely simple plot
   Graph(width: Size, height: Size, points: List(Float))
   /// Prints some positional information for developer debugging
   Debug
-  // progress bar
+  /// A progress bar, will automatically calculate fill percent based off max and current values
   Progress(width: Size, max: Int, value: Int, color: Color)
-  // TODO
+  /// Wraps a `Layout`
   Layouts(layout: Layout(msg))
 }
 
+/// Configurable size options/units for ui elements
 pub type Size {
+  /// Absolute width/height
   Px(Int)
+  /// A percentage of the parent item width/height
   Pct(Int)
+  /// Will fit the item to the parents width/height. When multiple exist within
+  /// a single item, such as a layout, will automatically divide the space
+  /// between items.
   Fill
 }
 
@@ -870,6 +920,8 @@ type Separator {
   In
 }
 
+/// Used to set all children of `Aligned` to the selected alignment.
+///
 pub type Align {
   Left
   Center
@@ -1203,10 +1255,25 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
 // LAYOUT
 //
 
+/// Options for defining and controlling application layout.
 pub type Layout(msg) {
+  /// A grid-based layout defining rows and columns which contain cells and the gaps between them.
+  ///
+  /// This should be remeniscent of CSS Grid. You define a list of rows and
+  /// columns by size, then use Cells to fill the rows/columns to create descrete
+  /// areas of ui elements.
+  ///
+  /// Consider using some of the default provided layouts, such as
+  /// `layout_center` and `layout_split` or view the examples/layouts for more
+  /// complex custom layouts.
+  ///
+  /// Note: Layouts can be nested as long as it is the only child of a cell.
   Grid(gap: Int, rows: List(Size), columns: List(Size), cells: List(Cell(msg)))
 }
 
+/// A Cell is an item within a Layout. Use Cells to define how many rows and
+/// columns the content should cover.
+///
 pub type Cell(msg) {
   Cell(content: Node(msg), row: #(Int, Int), col: #(Int, Int))
 }
@@ -1372,7 +1439,8 @@ fn ignore_zero(code: String, i: Int) -> String {
 // GRAPHIC
 //
 
-pub type Graphic {
+// TODO: this should be made public, styling UI elements probably needs reworked first.
+type Graphic {
   Bold
   Faint
   Italic
@@ -1392,6 +1460,9 @@ fn graphic_to_string(graphic: Graphic) -> String {
 // COLOR
 //
 
+/// ANSI terminal color. Used for setting the background/foreground of UI
+/// elements.
+///
 pub type Color {
   Black
   Red
