@@ -85,21 +85,18 @@ fn view(model: Model) -> shore.Node(Msg) {
   shore.DivCol([
     "HELLO WORLD" |> shore.Text(None, None),
     shore.HR,
-    shore.Input("hi", model.hi, shore.Px(20), SetHi, shore.Border),
-    shore.BR,
+    shore.Input("hi:", model.hi, shore.Px(20), SetHi, shore.Simple),
     shore.BR,
     model.hi |> shore.Text(None, None),
     shore.BR,
-    shore.BR,
-    shore.Input("bye", model.bye, shore.Px(25), SetBye, shore.Border),
+    shore.Input("bye:", model.bye, shore.Px(25), SetBye, shore.Simple),
     shore.BR,
     model.bye |> shore.Text(None, None),
     shore.BR,
-    shore.Table(50, model.csv),
+    shore.TableKV(50, model.csv),
     shore.BR,
-    shore.BR,
-    shore.Progress(shore.Px(20), 100, model.counter, shore.Blue),
-    shore.BR,
+    shore.Text("hi", None, None),
+    //shore.Progress(shore.Px(20), 100, model.counter, shore.Blue),
     shore.BR,
     model.counter |> int.to_string |> shore.Text(Some(shore.Black), None),
     model.counter |> int.to_string |> shore.Text(Some(shore.Red), None),
@@ -119,6 +116,21 @@ fn view(model: Model) -> shore.Node(Msg) {
       x if x > 20 -> shore.Button("dd", key.Char("d"), Set(0))
       x -> shore.Text("x", Some(shore.Red), None)
     },
+    shore.BR,
+    shore.Graph(shore.Px(60), 7, [
+      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
+      6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
+      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
+      6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
+      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
+      6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
+      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
+      6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
+      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
+      6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
+      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0,
+    ]),
+    shore.Text("hi", None, None),
   ])
 }
 
