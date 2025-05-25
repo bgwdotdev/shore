@@ -138,21 +138,13 @@ type State(model, msg) {
     width: Int,
     height: Int,
     tasks: process.Subject(Event(msg)),
-    mode: Mode,
     last_input: String,
     focused: Option(Focused(msg)),
   )
 }
 
 pub type Keybinds {
-  Keybinds(
-    exit: Key,
-    focus_clear: Key,
-    focus_next: Key,
-    focus_prev: Key,
-    mode_insert: Key,
-    mode_normal: Key,
-  )
+  Keybinds(exit: Key, focus_clear: Key, focus_next: Key, focus_prev: Key)
 }
 
 pub fn default_keybinds() -> Keybinds {
@@ -161,8 +153,6 @@ pub fn default_keybinds() -> Keybinds {
     focus_clear: key.Esc,
     focus_next: key.Tab,
     focus_prev: key.BackTab,
-    mode_insert: key.Enter,
-    mode_normal: key.Esc,
   )
 }
 
@@ -172,8 +162,6 @@ pub fn vim_keybinds() -> Keybinds {
     focus_clear: key.Esc,
     focus_next: key.Char("j"),
     focus_prev: key.Char("k"),
-    mode_insert: key.Char("i"),
-    mode_normal: key.Esc,
   )
 }
 
@@ -186,11 +174,6 @@ type Focused(msg) {
     offset: Int,
     width: Int,
   )
-}
-
-type Mode {
-  Insert
-  Normal
 }
 
 pub fn start(
@@ -218,7 +201,6 @@ fn shore_start(spec: Spec(model, msg)) {
           width:,
           height:,
           tasks:,
-          mode: Normal,
           last_input: "",
           focused: None,
         )
@@ -280,34 +262,29 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
       actor.continue(state)
     }
     KeyPress(input) -> {
-      case state.mode {
-        Normal -> {
-          let ui = state.spec.view(state.model)
-
-          // check for framework key events
-          let state = case control_event(input, state.spec.keybinds) {
-            // TODO: decouple mode from focus clear?
-            Some(FocusClear) -> State(..state, focused: None, mode: Normal)
-            Some(FocusPrev) -> {
-              let focusable = list_focusable([ui], state)
-              let focused = case state.focused {
-                None -> focusable |> list.first |> option.from_result
-                Some(x) -> focusable |> focus_next(x, False)
-              }
-              State(..state, focused:)
-            }
-            Some(FocusNext) -> {
-              let focusable = list_focusable([ui], state) |> list.reverse
-              let focused = case state.focused {
-                None -> focusable |> list.first |> option.from_result
-                Some(x) -> focusable |> focus_next(x, False)
-              }
-              State(..state, focused:)
-            }
-            Some(ModeInsert) -> State(..state, mode: Insert)
-            None -> state
+      let ui = state.spec.view(state.model)
+      let state = case control_event(input, state.spec.keybinds) {
+        Some(FocusClear) -> State(..state, focused: None)
+        Some(FocusPrev) -> {
+          let focusable = list_focusable([ui], state)
+          let focused = case state.focused {
+            None -> focusable |> list.first |> option.from_result
+            Some(x) -> focusable |> focus_next(x, False)
           }
-
+          State(..state, focused:)
+        }
+        Some(FocusNext) -> {
+          let focusable = list_focusable([ui], state) |> list.reverse
+          let focused = case state.focused {
+            None -> focusable |> list.first |> option.from_result
+            Some(x) -> focusable |> focus_next(x, False)
+          }
+          State(..state, focused:)
+        }
+        None -> state
+      }
+      case state.focused {
+        None -> {
           // pass the key event onto the application as well
           let state = {
             let model = case detect_event(state, ui, input) {
@@ -326,25 +303,27 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
           redraw_on_update(state, input)
           actor.continue(state)
         }
-        Insert -> {
-          let mode = case input == state.spec.keybinds.mode_normal {
-            True -> Normal
-            False -> Insert
-          }
-          let #(focused, model) = case state.focused {
+        Some(focused) -> {
+          let reload = list_focusable([ui], state) |> focus_current(focused)
+          case reload {
             Some(focused) -> {
               let focused = input_handler(focused, input)
               let #(model, tasks) =
                 state.spec.update(state.model, focused.event(focused.value))
               tasks |> task_handler(state.tasks)
-              #(Some(focused), model)
+              let state = State(..state, focused: Some(focused), model:)
+              let state = update_viewport(state)
+              redraw_on_update(state, input)
+              actor.continue(state)
             }
-            x -> #(x, state.model)
+            // Element has disappeared from screen for reasons
+            None -> {
+              let state = State(..state, focused: None)
+              let state = update_viewport(state)
+              redraw_on_update(state, input)
+              actor.continue(state)
+            }
           }
-          let state = State(..state, focused:, mode:, model:)
-          let state = update_viewport(state)
-          redraw_on_update(state, input)
-          actor.continue(state)
         }
       }
     }
@@ -544,6 +523,20 @@ fn focus_next(
   }
 }
 
+fn focus_current(
+  focusable: List(Focused(msg)),
+  focused: Focused(msg),
+) -> Option(Focused(msg)) {
+  case focusable {
+    [] -> None
+    [x, ..xs] ->
+      case x.label == focused.label {
+        True -> Some(x)
+        False -> focus_current(xs, focused)
+      }
+  }
+}
+
 //
 // TEXT INPUT
 //
@@ -645,7 +638,6 @@ type Control {
   FocusClear
   FocusNext
   FocusPrev
-  ModeInsert
 }
 
 fn control_event(input: Key, keybinds: Keybinds) -> Option(Control) {
@@ -653,7 +645,6 @@ fn control_event(input: Key, keybinds: Keybinds) -> Option(Control) {
     x if x == keybinds.focus_clear -> FocusClear |> Some
     x if x == keybinds.focus_next -> FocusNext |> Some
     x if x == keybinds.focus_prev -> FocusPrev |> Some
-    x if x == keybinds.mode_insert -> ModeInsert |> Some
     _ -> None
   }
 }
