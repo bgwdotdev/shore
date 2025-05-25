@@ -13,7 +13,7 @@ Further documentation can be found at <https://hexdocs.pm/shore>.
 
 ## Example
 
-Check out the `examples/` directory for more information and showcase of features such as commands, layout and styling
+Check out the `examples` directory for more information and showcase of features such as commands, layout and styling
 
 ```sh
 gleam add shore@1
@@ -22,22 +22,25 @@ gleam add shore@1
 ```gleam
 import gleam/erlang/process
 import gleam/int
-import gleam/option.{None}
+import gleam/option.{Some}
 import shore
 import shore/key
+import shore/layout
+import shore/style
+import shore/ui
 
 // MAIN
 
 pub fn main() {
   let exit = process.new_subject()
   let assert Ok(_actor) =
-    shore.Spec(
+    shore.spec(
       init:,
       update:,
       view:,
       exit:,
       keybinds: shore.default_keybinds(),
-      redraw: shore.OnUpdate,
+      redraw: shore.on_timer(16),
     )
     |> shore.start
   exit |> process.receive_forever
@@ -72,23 +75,27 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.DivCol([
-    shore.TextMulti(
-      "keybinds
+  ui.box(
+    [
+      ui.text(
+        "keybinds
 
 i: increments
 d: decrements
 ctrl+x: exits
       ",
-      None,
-      None,
-    ),
-    shore.Text(int.to_string(model.counter), None, None),
-    shore.DivRow([
-      shore.Button("increment", key.Char("i"), Increment),
-      shore.Button("decrement", key.Char("d"), Decrement),
-    ]),
-  ])
+      ),
+      ui.text(int.to_string(model.counter)),
+      ui.br(),
+      ui.row([
+        ui.button("increment", key.Char("i"), Increment),
+        ui.button("decrement", key.Char("d"), Decrement),
+      ]),
+    ],
+    Some("counter"),
+  )
+  |> ui.align(style.Center, _)
+  |> layout.center(style.Px(50), style.Px(12))
 }
 ```
 
