@@ -2,7 +2,14 @@ import gleam/erlang/process.{type Subject}
 import gleam/otp/actor
 import shore/internal
 import shore/key.{type Key}
-import shore/style
+
+/// Send events to shore with the `send` function
+pub type Event(msg) =
+  internal.Event(msg)
+
+/// Represents UI
+pub type Node(msg) =
+  internal.Node(msg)
 
 /// A shore application is made up of these base parts. Following The Elm
 /// Architecture, you must define an init, view and update function which shore
@@ -48,7 +55,7 @@ pub fn spec(
 /// Starts the application actor and returns its subject
 pub fn start(
   spec: internal.Spec(model, msg),
-) -> Result(Subject(internal.Event(msg)), actor.StartError) {
+) -> Result(Subject(Event(msg)), actor.StartError) {
   internal.start(spec)
 }
 
@@ -92,7 +99,7 @@ pub fn send(msg: msg) -> internal.Event(msg) {
 /// Manually trigger the exit for your TUI. Normally this would be handled
 /// through the exit keybind.
 ///
-pub fn exit() -> internal.Event(msg) {
+pub fn exit() -> Event(msg) {
   internal.exit()
 }
 

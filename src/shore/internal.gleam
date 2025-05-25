@@ -1183,6 +1183,7 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
       |> string.join("")
     let content =
       [
+        c(Reset),
         c(SavePos),
         lhs,
         c(MoveUp(1)),
@@ -1196,6 +1197,7 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
         // offset a div col join
         c(MoveDown(height - 1)),
         c(SavePos),
+        c(Reset),
       ]
       |> string.join("")
     Element(width:, height:, content:)
