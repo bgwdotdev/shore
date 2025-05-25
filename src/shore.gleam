@@ -618,7 +618,7 @@ fn element_prefix(element: Element, prefix: String) -> Element {
 //
 
 // TODO: unpublic
-pub type Pos {
+type Pos {
   Pos(x: Int, y: Int, width: Int, height: Int, align: Align)
 }
 
@@ -864,7 +864,7 @@ fn calc_size_input(size: Size, width: Int, label: String) -> Int {
   calc_size(size, width - string.length(label))
 }
 
-pub type Separator {
+type Separator {
   Row
   Col
   In
@@ -1211,7 +1211,7 @@ pub type Cell(msg) {
   Cell(content: Node(msg), row: #(Int, Int), col: #(Int, Int))
 }
 
-pub fn layout(layout: Layout(msg), pos: Pos) -> List(#(Node(msg), Pos)) {
+fn layout(layout: Layout(msg), pos: Pos) -> List(#(Node(msg), Pos)) {
   let col_sizes = layout.columns |> calc_sizes(pos.width, _)
   let row_sizes = layout.rows |> calc_sizes(pos.height, _)
   layout.cells
