@@ -69,7 +69,17 @@ pub fn input(
   width: style.Size,
   event: fn(String) -> msg,
 ) -> Node(msg) {
-  internal.Input(label, value, width, event)
+  internal.Input(label, value, width, event, hidden: False)
+}
+
+/// A field for text input with the content display hidden, useful for password fields
+pub fn input_hidden(
+  label: String,
+  value: String,
+  width: style.Size,
+  event: fn(String) -> msg,
+) -> Node(msg) {
+  internal.Input(label, value, width, event, hidden: True)
 }
 
 /// A non-visible button assigned to a key press to execute an event

@@ -147,7 +147,8 @@ fn view_2(model: Model) -> shore.Node(Msg) {
       style.Fill,
       SetUsername,
     )
-  let password = ui.input("password:", model.password, style.Fill, SetPassword)
+  let password =
+    ui.input_hidden("password:", model.password, style.Fill, SetPassword)
   layout.center(
     ui.box(
       [

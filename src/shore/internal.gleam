@@ -389,7 +389,7 @@ fn do_list_focusable(
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
           |> list.flatten
         }
-        Input(label, value, width, event) -> {
+        Input(label, value, width, event, _) -> {
           let cursor = string.length(value)
           let width = calc_size_input(width, pos.width, label)
           let focused =
@@ -735,7 +735,7 @@ fn render_node(
       |> Some
     }
     KeyBind(..) -> None
-    Input(label, value, width, _event) -> {
+    Input(label, value, width, _event, hidden) -> {
       let width = calc_size_input(width, pos.width, label)
       let #(is_focused, cursor) = case state.focused {
         Some(FocusedInput(..) as focused) if focused.label == label -> #(
@@ -749,7 +749,16 @@ fn render_node(
           focused.offset
         _ -> input_offset(string.length(value), 0, width)
       }
-      draw_input(Iput(width, 1, label, value, is_focused, cursor, offset))
+      draw_input(Iput(
+        width,
+        1,
+        label,
+        value,
+        is_focused,
+        cursor,
+        offset,
+        hidden,
+      ))
       |> Some
     }
     Text(text, fg, bg) -> draw_text(text, fg, bg, pos) |> Some
@@ -816,6 +825,7 @@ pub type Node(msg) {
     value: String,
     width: style.Size,
     event: fn(String) -> msg,
+    hidden: Bool,
   )
   /// A horizontal line
   HR
@@ -972,30 +982,35 @@ type Iput {
     pressed: Bool,
     cursor: Int,
     offset: Int,
+    hidden: Bool,
   )
 }
 
-fn draw_input(btn: Iput) -> Element {
+fn draw_input(input: Iput) -> Element {
   // 2 == padding of space either side
-  let color = case btn.pressed {
+  let color = case input.pressed {
     True -> style.Green |> Fg |> c
     False -> style.Blue |> Fg |> c
   }
-  let in_width = btn.width - 2
-  let text = btn.text <> " "
+  let in_width = input.width - 2
+  let text = case input.hidden {
+    True -> string.length(input.text) |> string.repeat("•", _)
+    False -> input.text
+  }
+  let text = text <> " "
   let text_trim =
     text
-    |> string.slice(btn.offset, in_width)
+    |> string.slice(input.offset, in_width)
     |> fn(x) {
-      case btn.pressed {
-        True -> map_cursor(x, btn.cursor - btn.offset, btn.width)
+      case input.pressed {
+        True -> map_cursor(x, input.cursor - input.offset, input.width)
         False -> x
       }
     }
 
-  [color, btn.title, " ", c(Reset), text_trim]
+  [color, input.title, " ", c(Reset), text_trim]
   |> string.join("")
-  |> Element(width: btn.width, height: btn.height)
+  |> Element(width: input.width, height: input.height)
 }
 
 fn map_cursor(str: String, cursor: Int, width: Int) -> String {
