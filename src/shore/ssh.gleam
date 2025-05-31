@@ -5,13 +5,27 @@ import gleam/erlang/process
 import gleam/io
 import shore
 
+// TODO: do we need user directory?
+pub type Config {
+  Config(host_key_directory: String, auth: Auth, user_directory: String)
+}
+
+// TODO: explore auth api and options
+pub type Auth {
+  Anonymous
+  Password
+  Keys
+}
+
+// TODO: spec configs: one-to-one vs one-to-many?
 pub fn serve(spec: shore.Spec(model, msg)) -> Result(process.Pid, Nil) {
   let assert Ok(_) = erlang.ensure_all_started("ssh" |> atom.create_from_string)
   [
     SystemDir("." |> charlist.from_string),
     UserDir("/home/bgw/.ssh" |> charlist.from_string),
+    //Pwdfun(auth),
     NoAuthNeeded(True),
-    Shell(fn(user, peer) { shell(user, peer, spec) }),
+    SshCli(#("shore@sshcli" |> atom.create_from_string, [spec])),
   ]
   |> daemon_ffi(2222, _)
 }
@@ -25,7 +39,6 @@ fn shell(
   peer: Peer,
   spec: shore.Spec(model, msg),
 ) -> process.Pid {
-  raw_erl()
   let pid =
     process.start(
       fn() {
@@ -40,11 +53,44 @@ fn shell(
       False,
     )
 
-  process.start(
-    fn() { get_chars("", 10) |> charlist.to_string |> io.print },
-    True,
-  )
+  process.start(fn() { get_chars("", 100) |> echo }, True)
   pid
+}
+
+type User
+
+@external(erlang, "io", "user")
+fn u() -> User
+
+@external(erlang, "io", "getopts")
+fn getopts() -> User
+
+@external(erlang, "shore_ffi", "tty")
+fn tty() -> TODO
+
+fn sheller(user: Charlist, peer: Peer) -> process.Pid {
+  tty() |> echo
+  //getopts() |> echo
+  //raw_erl() |> echo
+  //cmd_ffi("/tmp/shore_raw" |> charlist.from_string)
+  //rawport()
+  //|> charlist.to_string
+  //|> echo
+  //cmd_ffi("tty" |> charlist.from_string) |> charlist.to_string |> echo
+  process.start(sheller_loop, False)
+  //rawport()
+  process.self()
+}
+
+fn sheller_loop() {
+  //cmd_ffi("tty" |> charlist.from_string) |> charlist.to_string |> echo
+  case get_chars("", 10) {
+    x -> {
+      echo "got chars: "
+      echo x
+    }
+  }
+  sheller_loop()
 }
 
 @external(erlang, "shore_ffi", "thing")
@@ -78,13 +124,15 @@ fn test_loop(subject: process.Subject(SshChannelMsg)) -> Nil {
 // FFI
 //
 
-type DaemonOption {
+type DaemonOption(model, msg) {
   SystemDir(Charlist)
   UserDir(Charlist)
   AuthMethods(Charlist)
   Pwdfun(fn(Charlist, Charlist) -> Bool)
   Shell(fn(Charlist, Peer) -> process.Pid)
+  SshCli(#(atom.Atom, List(shore.Spec(model, msg))))
   NoAuthNeeded(Bool)
+  Subsystems(List(#(Charlist, #(atom.Atom, List(Int)))))
 }
 
 type SshConnection {
@@ -113,7 +161,10 @@ type SshChannelMsg {
 }
 
 @external(erlang, "ssh", "daemon")
-fn daemon_ffi(port: Int, opts: List(DaemonOption)) -> Result(process.Pid, Nil)
+fn daemon_ffi(
+  port: Int,
+  opts: List(DaemonOption(model, msg)),
+) -> Result(process.Pid, Nil)
 
 @external(erlang, "ssh_connection", "send")
 fn send_ffi(channel: Channel, msg: Charlist) -> Nil

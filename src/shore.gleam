@@ -1376,7 +1376,7 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
 
 const esc = "\u{001b}"
 
-type TermCode {
+pub type TermCode {
   Clear
   Top
   HideCursor
@@ -1403,7 +1403,7 @@ type TermCode {
   ESU
 }
 
-fn c(code: TermCode) -> String {
+pub fn c(code: TermCode) -> String {
   case code {
     Clear -> esc <> "[2J" <> esc <> "[H"
     Top -> esc <> "[H"
