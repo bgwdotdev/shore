@@ -15,7 +15,6 @@ pub type TODO
 // API NOW
 //
 
-// TODO: there may be other things to handle here:
 // https://www.erlang.org/doc/apps/ssh/ssh_client_channel.html#c:handle_msg/2
 pub opaque type HandleMsg {
   SshChannelUp(channel_id: Int, pid: Pid)
@@ -43,8 +42,7 @@ type ChannelMsg {
     pixel_width: Int,
     pixel_height: Int,
   )
-  Closed(channel_id: Int)
-  // TODO: variants
+  // TODO:
   // eof
   // closed
   // env
@@ -53,18 +51,6 @@ type ChannelMsg {
   // signal
   // exit_status
   // exit_signal
-}
-
-type Terminal {
-  Terminal(
-    terminal: Charlist,
-    char_width: Int,
-    row_height: Int,
-    pixel_width: Int,
-    pixel_height: Int,
-    // TODO: decide what to do with this info, do we need it?
-    modes: List(TODO),
-  )
 }
 
 pub opaque type Reason {
@@ -88,17 +74,11 @@ pub type StartOpt
 
 pub type TTY
 
-@external(erlang, "shore_ffi", "tty")
-fn tty() -> TTY
-
 // TODO: error handling
 pub fn init(args: List(internal.Spec(model, msg))) -> Continue(Init(model, msg)) {
-  case args {
-    [spec] -> {
-      Init(spec:) |> Ok |> to_continue
-    }
-    x -> panic as { "init was not expecting: " <> string.inspect(x) }
-  }
+  let assert [spec] = args
+    as "PANIC: This crash is framework bug caused by bad use of ffi and should never ever happen"
+  Init(spec:) |> Ok |> to_continue
 }
 
 type RendererState {
@@ -134,7 +114,7 @@ fn render_loop(
   state: RendererState,
 ) -> actor.Next(String, RendererState) {
   case send(state.ssh_pid, state.channel_id, msg) {
-    Ok(Nil) -> actor.continue(state)
+    Ok(_) -> actor.continue(state)
     // TODO: should we do better error handling here?
     // error can be Closed or Timeout
     Error(..) -> actor.Stop(process.Normal)
@@ -182,7 +162,7 @@ pub fn terminate(_reason: Reason, state: State(msg)) -> Nil {
   Nil
 }
 
-@external(erlang, "ssh_connection", "send")
+@external(erlang, "shore_ffi", "ssh_connection_send")
 fn send(ref: Pid, id: Int, data: String) -> Result(Nil, Reason)
 
 //
