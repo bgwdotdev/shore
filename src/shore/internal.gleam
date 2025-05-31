@@ -4,7 +4,7 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/otp/actor
+import gleam/otp/actor.{type Started}
 import gleam/result
 import gleam/string
 import shore/key.{type Key}
@@ -34,6 +34,7 @@ type State(model, msg) {
     tasks: process.Subject(Event(msg)),
     last_input: String,
     focused: Option(Focused(msg)),
+    renderer: Option(Subject(String)),
   )
 }
 
@@ -62,15 +63,35 @@ type Focused(msg) {
 pub fn start(
   spec: Spec(model, msg),
 ) -> Result(Subject(Event(msg)), actor.StartError) {
-  raw_erl()
-  { c(HideCursor) <> c(AltBuffer) } |> io.print
-  use actor.Started(data: shore, ..) <- result.map(shore_start(spec))
-  process.spawn(fn() { read_input(shore, spec.keybinds.exit) })
+  start_custom_renderer(spec, None)
+}
+
+pub fn start_custom_renderer(
+  spec: Spec(model, msg),
+  renderer: Option(Subject(String)),
+) -> Result(Subject(Event(msg)), actor.StartError) {
+  use actor.Started(data: shore, ..) <- result.map(shore_start(spec, renderer))
+  // only configure local terminal if rendering locally
+  // TODO: review this
+  case renderer {
+    Some(renderer) -> {
+      actor.send(renderer, init_terminal())
+    }
+    None -> {
+      raw_erl()
+      init_terminal() |> io.print
+      process.spawn(fn() { read_input(shore) })
+      Nil
+    }
+  }
   redraw_on_timer(spec, shore)
   shore
 }
 
-fn shore_start(spec: Spec(model, msg)) {
+fn shore_start(
+  spec: Spec(model, msg),
+  renderer: Option(Subject(String)),
+) -> Result(Started(Subject(Event(msg))), actor.StartError) {
   actor.new_with_initialiser(1000, fn(tasks) {
     let #(model, task_init) = spec.init()
     let assert Ok(width) = terminal_columns()
@@ -84,6 +105,7 @@ fn shore_start(spec: Spec(model, msg)) {
         tasks:,
         last_input: "",
         focused: None,
+        renderer:,
       )
     let _first_paint = model |> spec.view |> render(state, _, key.Null)
     task_init |> task_handler(tasks)
@@ -100,13 +122,10 @@ fn shore_start(spec: Spec(model, msg)) {
 @external(erlang, "io", "get_chars")
 fn get_chars(prompt: String, count: Int) -> String
 
-fn read_input(shore: Subject(Event(msg)), exit: Key) -> Nil {
+fn read_input(shore: Subject(Event(msg))) -> Nil {
   let key = get_chars("", 10) |> key.from_string
-  case key == exit {
-    True -> Exit |> process.send(shore, _)
-    False -> key |> KeyPress |> process.send(shore, _)
-  }
-  read_input(shore, exit)
+  key |> KeyPress |> process.send(shore, _)
+  read_input(shore)
 }
 
 //
@@ -118,6 +137,7 @@ pub opaque type Event(msg) {
   KeyPress(Key)
   Cmd(msg)
   Redraw
+  Resize(width: Int, height: Int)
   Exit
 }
 
@@ -135,7 +155,18 @@ pub fn exit() -> Event(msg) {
   Exit
 }
 
+pub fn key_press(key: Key) -> Event(msg) {
+  KeyPress(key)
+}
+
+pub fn resize(width width: Int, height height: Int) -> Event(msg) {
+  Resize(width:, height:)
+}
+
 fn shore_loop(state: State(model, msg), event: Event(msg)) {
+  // NOTE: assign here to avoid syntax highlighting error, delete whenever fixed
+  let exit = state.spec.keybinds.exit
+
   case event {
     Cmd(msg) -> {
       let #(model, tasks) = state.spec.update(state.model, msg)
@@ -144,6 +175,9 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
       let state = update_viewport(state)
       redraw_on_update(state, key.Null)
       actor.continue(state)
+    }
+    KeyPress(input) if input == exit -> {
+      shore_loop(state, Exit)
     }
     KeyPress(input) -> {
       let ui = state.spec.view(state.model)
@@ -233,8 +267,16 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
       redraw(state, key.Null)
       actor.continue(state)
     }
+    Resize(width:, height:) -> {
+      let state = State(..state, width:, height:)
+      actor.continue(state)
+    }
     Exit -> {
-      { c(ShowCursor) <> c(MainBuffer) } |> io.print
+      // TODO: local renderer should be an actor too?
+      case state.renderer {
+        Some(renderer) -> actor.send(renderer, restore_terminal())
+        None -> restore_terminal() |> io.print
+      }
       process.send(state.spec.exit, Nil)
       actor.stop()
     }
@@ -242,9 +284,16 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
 }
 
 fn update_viewport(state: State(model, msg)) -> State(model, msg) {
-  let assert Ok(width) = terminal_columns()
-  let assert Ok(height) = terminal_rows()
-  State(..state, width:, height:)
+  // only read local terminal size if rendering locally
+  // TODO: review this
+  case state.renderer {
+    Some(_) -> state
+    None -> {
+      let assert Ok(width) = terminal_columns()
+      let assert Ok(height) = terminal_rows()
+      State(..state, width:, height:)
+    }
+  }
 }
 
 // TDOO: fix to be tail call recursive?
@@ -615,16 +664,21 @@ type Pos {
 
 fn render(state: State(model, msg), node: Node(msg), last_input: Key) -> Nil {
   let pos = Pos(0, 0, state.width, state.height, style.Left)
-  c(BSU) |> io.print
-  {
-    c(Clear)
-    <> node
-    |> render_node(state, _, last_input, pos)
-    |> option.map(fn(r) { r.content })
-    |> option.unwrap("")
+  let render = [
+    c(BSU),
+    {
+      c(Clear)
+      <> node
+      |> render_node(state, _, last_input, pos)
+      |> option.map(fn(r) { r.content })
+      |> option.unwrap("")
+    },
+    c(ESU),
+  ]
+  case state.renderer {
+    Some(renderer) -> render |> list.each(process.send(renderer, _))
+    None -> render |> list.each(io.print)
   }
-  |> io.print
-  let _ = c(ESU) |> io.print
   Nil
 }
 
@@ -1383,6 +1437,14 @@ fn ignore_zero(code: String, i: Int) -> String {
     0 -> ""
     _ -> code
   }
+}
+
+pub fn init_terminal() -> String {
+  c(HideCursor) <> c(AltBuffer)
+}
+
+pub fn restore_terminal() -> String {
+  c(ShowCursor) <> c(MainBuffer)
 }
 
 //

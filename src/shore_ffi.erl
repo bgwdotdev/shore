@@ -1,5 +1,5 @@
 -module(shore_ffi).
--export([thing/1, rawish/0, rawport/0, rawport2/0, tty/0, leader/0, to_continue/1]).
+-export([thing/1, rawish/0, rawport/0, rawport2/0, leader/0, to_continue/1, to_handle_msg/1]).
 
 thing(MyFun) ->
   receive
@@ -45,14 +45,20 @@ rawport2() ->
 leader() -> 
   io:format("Group leader before: ~p~n", [group_leader()]).
 
-tty() ->
-  prim_tty:init_ssh(#{input => raw, output => raw}, {80, 24}, utf8).
 
-
+%%
 %% HEPLERS
+%% 
 
 to_continue(Result) ->
   case Result of
-    {error, Reason} -> {stop, Reason};
+    {error, {Id, Reason}} -> {stop, Id, Reason};
     {ok, State} -> {ok, State}
+  end.
+
+% can't define 'EXIT' in gleam, need to type cast
+to_handle_msg(Msg) ->
+  case Msg of
+    {'EXIT', Pid, Reason } -> {ssh_exit, Pid, Reason};
+    Msg -> Msg
   end.

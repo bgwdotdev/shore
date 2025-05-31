@@ -2,9 +2,12 @@ import gleam/erlang/atom.{type Atom}
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process.{type Pid, type Subject}
 import gleam/io
+import gleam/option.{Some}
+import gleam/otp/actor
 import gleam/string
 import shore
 import shore/internal
+import shore/key
 
 pub type TODO
 
@@ -16,6 +19,7 @@ pub type TODO
 // https://www.erlang.org/doc/apps/ssh/ssh_client_channel.html#c:handle_msg/2
 pub opaque type HandleMsg {
   SshChannelUp(channel_id: Int, pid: Pid)
+  SshExit(pid: Pid, reason: Reason)
 }
 
 // https://www.erlang.org/doc/apps/ssh/ssh_client_channel.html#c:handle_ssh_msg/2
@@ -39,6 +43,7 @@ type ChannelMsg {
     pixel_width: Int,
     pixel_height: Int,
   )
+  Closed(channel_id: Int)
   // TODO: variants
   // eof
   // closed
@@ -62,31 +67,21 @@ type Terminal {
   )
 }
 
-// TODO: map to this?
-//type SshDataTypeCode {
-//  // 0
-//  Normal
-//  // 1
-//  StdErr
-//}
-
 pub opaque type Reason {
   Normal
   Shutdown
-  // TODO: #(shutdown, term())
-  // TODO: term()
 }
 
 //
 // START POINT
 //
 
-pub type Init(msg) {
-  Init(shore: Subject(shore.Event(msg)))
+pub type Init(model, msg) {
+  Init(spec: internal.Spec(model, msg))
 }
 
 pub type State(msg) {
-  State(pid: Pid, shore: Subject(shore.Event(msg)))
+  State(ssh_pid: Pid, channel_id: Int, shore: Subject(shore.Event(msg)))
 }
 
 pub type StartOpt
@@ -97,55 +92,98 @@ pub type TTY
 fn tty() -> TTY
 
 // TODO: error handling
-pub fn init(args: List(internal.Spec(model, msg))) -> Continue(Init(msg)) {
+pub fn init(args: List(internal.Spec(model, msg))) -> Continue(Init(model, msg)) {
   case args {
     [spec] -> {
-      let assert Ok(shore) = spec |> shore.start as "init failed to start spec"
-      Init(shore:) |> Ok |> to_continue
+      Init(spec:) |> Ok |> to_continue
     }
     x -> panic as { "init was not expecting: " <> string.inspect(x) }
   }
 }
 
-pub fn handle_msg(msg: HandleMsg, state: Init(msg)) -> Continue(State(msg)) {
-  echo "handle_msg"
-  echo msg
-  //let chan = session_channel(msg.pid, 10) |> echo
-  State(msg.pid, state.shore) |> Ok |> to_continue
+type RendererState {
+  RendererState(ssh_pid: Pid, channel_id: Int)
+}
+
+pub fn handle_msg(
+  msg: HandleMsg,
+  state: Init(model, msg),
+) -> Continue(State(msg)) {
+  let msg = msg |> to_handle_msg
+  case msg {
+    SshChannelUp(channel_id, pid) -> {
+      let assert Ok(renderer) =
+        actor.start(RendererState(pid, channel_id), render_loop)
+      let assert Ok(shore) =
+        state.spec |> internal.start_custom_renderer(Some(renderer))
+      State(ssh_pid: pid, channel_id: channel_id, shore:)
+      |> Ok
+      |> to_continue
+    }
+    SshExit(reason:, ..) -> {
+      Error(#(0, reason)) |> to_continue
+    }
+  }
+}
+
+@external(erlang, "shore_ffi", "to_handle_msg")
+fn to_handle_msg(msg: HandleMsg) -> HandleMsg
+
+fn render_loop(
+  msg: String,
+  state: RendererState,
+) -> actor.Next(String, RendererState) {
+  case send(state.ssh_pid, state.channel_id, msg) {
+    Ok(Nil) -> actor.continue(state)
+    // TODO: should we do better error handling here?
+    // error can be Closed or Timeout
+    Error(..) -> actor.Stop(process.Normal)
+  }
 }
 
 pub fn handle_ssh_msg(
   msg: HandleSshMsg,
   state: State(msg),
 ) -> Continue(State(msg)) {
-  echo "handle_ssh_msg"
-  echo msg
   case msg {
-    SshCm(_, Data(data: "\u{0003}", ..)) -> {
-      Error(Shutdown) |> to_continue
+    SshCm(_, Pty(terminal: #(_, width, height, _, _, _), ..)) -> {
+      internal.resize(width:, height:)
+      |> actor.send(state.shore, _)
+      state |> Ok |> to_continue
     }
-    _x -> {
-      let _ = send(state.pid, 0, "x")
+    SshCm(_, Shell(..)) -> {
+      state |> Ok |> to_continue
+    }
+    // TODO: should we handle ctrl+c, no?
+    SshCm(_, Data(data:, ..)) -> {
+      data
+      |> key.from_string
+      |> internal.key_press
+      |> actor.send(state.shore, _)
+      state |> Ok |> to_continue
+    }
+    SshCm(_, WindowChange(char_width:, row_height:, ..)) -> {
+      internal.resize(width: char_width, height: row_height)
+      |> actor.send(state.shore, _)
+      state |> Ok |> to_continue
+    }
+    x -> {
+      echo "unhandled " <> string.inspect(x)
       state |> Ok |> to_continue
     }
   }
 }
 
-// TODO: cleanup
 // NOTE: return value is ignored
-pub fn terminate(reason: Reason, state: State(msg)) -> Nil {
-  echo "terminate"
-  echo reason
+pub fn terminate(_reason: Reason, state: State(msg)) -> Nil {
+  let assert Ok(Nil) =
+    internal.restore_terminal()
+    |> send(state.ssh_pid, state.channel_id, _)
   Nil
 }
 
-pub type ChannelId
-
-@external(erlang, "ssh_connection", "session_channel")
-fn session_channel(ref: Pid, timeout: Int) -> Result(ChannelId, Reason)
-
 @external(erlang, "ssh_connection", "send")
-fn send(ref: Pid, id: Int, datae: String) -> Result(Nil, Reason)
+fn send(ref: Pid, id: Int, data: String) -> Result(Nil, Reason)
 
 //
 // HEPLERS
@@ -154,4 +192,4 @@ fn send(ref: Pid, id: Int, datae: String) -> Result(Nil, Reason)
 pub type Continue(state)
 
 @external(erlang, "shore_ffi", "to_continue")
-fn to_continue(result: Result(state, Reason)) -> Continue(state)
+fn to_continue(result: Result(state, #(Int, Reason))) -> Continue(state)

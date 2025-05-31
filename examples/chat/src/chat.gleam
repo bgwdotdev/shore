@@ -10,10 +10,6 @@ import shore/style
 import shore/ui
 
 // MAIN
-//pub fn main() -> Nil {
-//  let assert Ok(_) = ssh.serve()
-//  process.sleep_forever()
-//}
 
 pub fn main() {
   let exit = process.new_subject()
@@ -26,9 +22,8 @@ pub fn main() {
       keybinds: shore.default_keybinds(),
       redraw: shore.on_timer(16),
     )
-  //let assert Ok(_actor) = spec |> shore.start
   let assert Ok(_) = ssh.serve(spec)
-  exit |> process.receive_forever
+  process.sleep_forever()
 }
 
 // MODEL

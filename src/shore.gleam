@@ -1,4 +1,5 @@
 import gleam/erlang/process.{type Subject}
+import gleam/option.{None, Some}
 import gleam/otp/actor
 import shore/internal
 import shore/key.{type Key}
