@@ -1,5 +1,5 @@
 -module(shore_ffi).
--export([thing/1, rawish/0, rawport/0, rawport2/0, tty/0, leader/0, echo/1, ptyopts/0]).
+-export([thing/1, rawish/0, rawport/0, rawport2/0, tty/0, leader/0, to_continue/1]).
 
 thing(MyFun) ->
   receive
@@ -48,12 +48,11 @@ leader() ->
 tty() ->
   prim_tty:init_ssh(#{input => raw, output => raw}, {80, 24}, utf8).
 
-echo(TTY) ->
-  receive
-    _M ->
-      io:format("msg"),
-      echo(TTY)
-  end.
 
-ptyopts() ->
-    ssh_channel:info(pty_options, self()).
+%% HEPLERS
+
+to_continue(Result) ->
+  case Result of
+    {error, Reason} -> {stop, Reason};
+    {ok, State} -> {ok, State}
+  end.
