@@ -4,6 +4,7 @@ import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
 import gleam/io
 import shore
+import shore/internal
 
 // TODO: do we need user directory?
 pub type Config {
@@ -18,7 +19,7 @@ pub type Auth {
 }
 
 // TODO: spec configs: one-to-one vs one-to-many?
-pub fn serve(spec: shore.Spec(model, msg)) -> Result(process.Pid, Nil) {
+pub fn serve(spec: internal.Spec(model, msg)) -> Result(process.Pid, Nil) {
   let assert Ok(_) = erlang.ensure_all_started("ssh" |> atom.create_from_string)
   [
     SystemDir("." |> charlist.from_string),
@@ -37,7 +38,7 @@ fn auth(user: Charlist, secret: Charlist) -> Bool {
 fn shell(
   user: Charlist,
   peer: Peer,
-  spec: shore.Spec(model, msg),
+  spec: internal.Spec(model, msg),
 ) -> process.Pid {
   let pid =
     process.start(
@@ -130,7 +131,7 @@ type DaemonOption(model, msg) {
   AuthMethods(Charlist)
   Pwdfun(fn(Charlist, Charlist) -> Bool)
   Shell(fn(Charlist, Peer) -> process.Pid)
-  SshCli(#(atom.Atom, List(shore.Spec(model, msg))))
+  SshCli(#(atom.Atom, List(internal.Spec(model, msg))))
   NoAuthNeeded(Bool)
   Subsystems(List(#(Charlist, #(atom.Atom, List(Int)))))
 }

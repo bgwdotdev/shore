@@ -1,12 +1,13 @@
-////shore.Px(50),
-
 import gleam/erlang/process
 import gleam/int
 import gleam/io
 import gleam/option.{None, Some}
 import shore
 import shore/key
+import shore/layout
 import shore/ssh
+import shore/style
+import shore/ui
 
 // MAIN
 //pub fn main() -> Nil {
@@ -17,15 +18,15 @@ import shore/ssh
 pub fn main() {
   let exit = process.new_subject()
   let spec =
-    shore.Spec(
+    shore.spec(
       init:,
       update:,
       view:,
       exit:,
       keybinds: shore.default_keybinds(),
-      redraw: shore.OnTimer(16),
+      redraw: shore.on_timer(16),
     )
-  let assert Ok(_actor) = spec |> shore.start
+  //let assert Ok(_actor) = spec |> shore.start
   let assert Ok(_) = ssh.serve(spec)
   exit |> process.receive_forever
 }
@@ -59,25 +60,23 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 // VIEW
 
 fn view(model: Model) -> shore.Node(Msg) {
-  shore.Layouts(shore.layout_center(
-    shore.DivCol([
-      shore.TextMulti(
+  layout.center(
+    ui.col([
+      ui.text(
         "keybinds
 
 i: increments
 d: decrements
 ctrl+x: exits
       ",
-        None,
-        None,
       ),
-      shore.Text(int.to_string(model.counter), None, None),
-      shore.DivRow([
-        shore.Button("increment", key.Char("i"), Increment),
-        shore.Button("decrement", key.Char("d"), Decrement),
+      ui.text(int.to_string(model.counter)),
+      ui.row([
+        ui.button("increment", key.Char("i"), Increment),
+        ui.button("decrement", key.Char("d"), Decrement),
       ]),
     ]),
-    shore.Px(50),
-    shore.Px(10),
-  ))
+    style.Px(50),
+    style.Px(10),
+  )
 }

@@ -4,6 +4,7 @@ import gleam/erlang/process.{type Pid, type Subject}
 import gleam/io
 import gleam/string
 import shore
+import shore/internal
 
 pub type TODO
 
@@ -96,7 +97,7 @@ pub type TTY
 fn tty() -> TTY
 
 // TODO: error handling
-pub fn init(args: List(shore.Spec(model, msg))) -> Continue(Init(msg)) {
+pub fn init(args: List(internal.Spec(model, msg))) -> Continue(Init(msg)) {
   case args {
     [spec] -> {
       let assert Ok(shore) = spec |> shore.start as "init failed to start spec"
@@ -124,12 +125,7 @@ pub fn handle_ssh_msg(
       Error(Shutdown) |> to_continue
     }
     _x -> {
-      let _ =
-        send(
-          state.pid,
-          0,
-          shore.c(shore.Clear) <> shore.c(shore.MoveRight(5)) <> "x",
-        )
+      let _ = send(state.pid, 0, "x")
       state |> Ok |> to_continue
     }
   }
