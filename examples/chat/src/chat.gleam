@@ -5,7 +5,6 @@ import gleam/option.{None, Some}
 import shore
 import shore/key
 import shore/layout
-import shore/ssh
 import shore/style
 import shore/ui
 
@@ -22,7 +21,7 @@ pub fn main() {
       keybinds: shore.default_keybinds(),
       redraw: shore.on_timer(16),
     )
-  let assert Ok(_) = ssh.serve(spec)
+  let assert Ok(_) = shore.start_ssh(spec)
   process.sleep_forever()
 }
 

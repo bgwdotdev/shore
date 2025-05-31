@@ -3,7 +3,6 @@ import gleam/erlang/atom
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
 import gleam/io
-import shore
 import shore/internal
 
 // TODO: do we need user directory?
