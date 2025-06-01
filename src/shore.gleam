@@ -1,8 +1,6 @@
 import gleam/erlang/process.{type Subject}
-import gleam/option.{None, Some}
 import gleam/otp/actor
 import shore/internal
-import shore/internal/ssh
 import shore/key.{type Key}
 
 /// Send events to shore with the `send` function
@@ -65,12 +63,6 @@ pub fn start(
   spec: internal.Spec(model, msg),
 ) -> Result(Subject(Event(msg)), actor.StartError) {
   internal.start(spec)
-}
-
-pub fn start_ssh(spec: internal.Spec(model, msg)) -> Result(Nil, Nil) {
-  // TODO: fix return
-  ssh.serve(spec)
-  Ok(Nil)
 }
 
 /// Set keybinds for various shore level functions, such as moving between

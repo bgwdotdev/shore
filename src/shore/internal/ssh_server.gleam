@@ -8,6 +8,8 @@ import shore/internal
 /// `system
 pub type Config {
   Config(
+    /// port to expose the ssh server on
+    port: Int,
     /// Path to directory with ssh_host keys
     /// https://www.erlang.org/doc/apps/ssh/ssh_file#SYSDIR
     system_directory: String,
@@ -16,8 +18,6 @@ pub type Config {
     user_directory: String,
     /// TODO
     auth: Auth,
-    /// port to expose the ssh server on
-    port: Int,
   )
 }
 
@@ -81,6 +81,9 @@ pub fn serve(
     SshCli(#("shore@internal@ssh_cli" |> atom.create_from_string, [spec])),
     SystemDir(config.system_directory |> charlist.from_string),
     UserDir(config.user_directory |> charlist.from_string),
+    Shell(Disabled),
+    Exec(Disabled),
+    ParallelLogin(True),
     ..config_auth(config.auth)
   ]
   daemon_ffi(config.port, opts)
@@ -104,6 +107,9 @@ type DaemonOption(model, msg) {
   SshCli(#(atom.Atom, List(internal.Spec(model, msg))))
   NoAuthNeeded(Bool)
   PkCheckUser
+  Exec(Disabled)
+  Shell(Disabled)
+  ParallelLogin(Bool)
 }
 
 @external(erlang, "ssh", "daemon")
@@ -121,3 +127,7 @@ pub type Secret {
 
 @external(erlang, "shore_ffi", "to_ssh_secret")
 fn to_ssh_secret(secret: SecretFfi) -> Secret
+
+type Disabled {
+  Disabled
+}

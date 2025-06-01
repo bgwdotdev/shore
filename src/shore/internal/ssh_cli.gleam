@@ -76,7 +76,9 @@ pub type TTY
 
 // TODO: error handling
 pub fn init(args: List(internal.Spec(model, msg))) -> Continue(Init(model, msg)) {
-  let assert [spec] = args
+  echo args
+  // NOTE: Second arg here is the atom `disabled` passed by setting `Exec(Disabled)`
+  let assert [spec, _] = args
     as "PANIC: This crash is framework bug caused by bad use of ffi and should never ever happen"
   Init(spec:) |> Ok |> to_continue
 }
