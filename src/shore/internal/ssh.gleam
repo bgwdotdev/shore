@@ -25,7 +25,7 @@ pub fn serve(spec: internal.Spec(model, msg)) -> Result(process.Pid, Nil) {
     UserDir("/home/bgw/.ssh" |> charlist.from_string),
     //Pwdfun(auth),
     NoAuthNeeded(True),
-    SshCli(#("shore@sshcli" |> atom.create_from_string, [spec])),
+    SshCli(#("shore@internal@ssh_cli" |> atom.create_from_string, [spec])),
   ]
   |> daemon_ffi(2222, _)
 }
