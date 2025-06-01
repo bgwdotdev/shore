@@ -36,12 +36,13 @@ fn config_auth(config: Auth) -> List(DaemonOption(model, msg)) {
     Password(app_auth) -> [
       NoAuthNeeded(False),
       AuthMethods("keyboard-interactive,password" |> charlist.from_string),
-      Pwdfun(fn(user, secret) {
+      Pwdfun(fn(user, secret, _peer_address, state) {
         let #(user, secret) = to_auth(user, secret)
-        case secret {
+        let ok = case secret {
           PublicKey(Nil) -> False
           UserPassword(password) -> app_auth(user, password)
         }
+        throttle(ok, state)
       }),
     ]
 
@@ -49,12 +50,13 @@ fn config_auth(config: Auth) -> List(DaemonOption(model, msg)) {
       NoAuthNeeded(False),
       PkCheckUser,
       AuthMethods("publickey" |> charlist.from_string),
-      Pwdfun(fn(user, secret) {
+      Pwdfun(fn(user, secret, _peer_address, state) {
         let #(user, secret) = to_auth(user, secret)
-        case secret {
+        let ok = case secret {
           PublicKey(Nil) -> app_auth(user)
           UserPassword(..) -> False
         }
+        throttle(ok, state)
       }),
     ]
 
@@ -64,11 +66,31 @@ fn config_auth(config: Auth) -> List(DaemonOption(model, msg)) {
       AuthMethods(
         "publickey,keyboard-interactive,password" |> charlist.from_string,
       ),
-      Pwdfun(fn(user, secret) {
+      Pwdfun(fn(user, secret, _peer_address, state) {
         let #(user, secret) = to_auth(user, secret)
-        app_auth(user, secret)
+        let ok = app_auth(user, secret)
+        throttle(ok, state)
       }),
     ]
+  }
+}
+
+type AuthState {
+  Undefined
+  AuthState(throttle: Int)
+}
+
+fn throttle(ok: Bool, state: AuthState) -> #(Bool, AuthState) {
+  case ok, state {
+    True, _ -> #(True, Undefined)
+    False, Undefined -> {
+      process.sleep(1000)
+      #(False, AuthState(throttle: 2000))
+    }
+    False, AuthState(throttle:) -> {
+      process.sleep(throttle)
+      #(False, AuthState(throttle: throttle * 2))
+    }
   }
 }
 
@@ -99,11 +121,14 @@ fn to_auth(user: Charlist, secret: SecretFfi) -> #(String, Secret) {
 // FFI
 //
 
+type PeerAddress =
+  #(#(Int, Int, Int, Int), Int)
+
 type DaemonOption(model, msg) {
   SystemDir(Charlist)
   UserDir(Charlist)
   AuthMethods(Charlist)
-  Pwdfun(fn(Charlist, SecretFfi) -> Bool)
+  Pwdfun(fn(Charlist, SecretFfi, PeerAddress, AuthState) -> #(Bool, AuthState))
   SshCli(#(atom.Atom, List(internal.Spec(model, msg))))
   NoAuthNeeded(Bool)
   PkCheckUser
