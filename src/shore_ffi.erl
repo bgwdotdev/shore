@@ -1,5 +1,5 @@
 -module(shore_ffi).
--export([to_continue/1, to_handle_msg/1, ssh_connection_send/3]).
+-export([to_continue/1, to_handle_msg/1, ssh_connection_send/3, to_ssh_secret/1]).
 
 %%
 %% HEPLERS
@@ -22,4 +22,10 @@ ssh_connection_send(Pid, Id, Data) ->
   case ssh_connection:send(Pid, Id, Data) of
     ok -> {ok, nil};
     Error -> Error
+  end.
+
+to_ssh_secret(Secret) ->
+  case Secret of
+    pubkey -> {public_key, nil};
+    Password -> {user_password, unicode:characters_to_binary(Password)}
   end.
