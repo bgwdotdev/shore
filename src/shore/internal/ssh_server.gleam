@@ -12,10 +12,7 @@ pub type Config {
     port: Int,
     /// Path to directory with ssh_host keys
     /// https://www.erlang.org/doc/apps/ssh/ssh_file#SYSDIR
-    system_directory: String,
-    /// Path to directory with authorized_keys file
-    /// https://www.erlang.org/doc/apps/ssh/ssh_file#USERDIR
-    user_directory: String,
+    host_key_directory: String,
     /// TODO
     auth: Auth,
   )
@@ -25,8 +22,11 @@ pub type Config {
 pub type Auth {
   Anonymous
   Password(auth: fn(String, String) -> Bool)
-  Key(auth: fn(String) -> Bool)
-  KeyOrPassword(auth: fn(String, Secret) -> Bool)
+  Key(auth: fn(String, PublicKey) -> Bool)
+  KeyOrPassword(
+    password_auth: fn(String, String) -> Bool,
+    key_auth: fn(String, PublicKey) -> Bool,
+  )
 }
 
 fn config_auth(config: Auth) -> List(DaemonOption(model, msg)) {
@@ -38,44 +38,41 @@ fn config_auth(config: Auth) -> List(DaemonOption(model, msg)) {
       AuthMethods("keyboard-interactive,password" |> charlist.from_string),
       Pwdfun(fn(user, secret, _peer_address, state) {
         let #(user, secret) = to_auth(user, secret)
-        let ok = case secret {
-          PublicKey(Nil) -> False
-          UserPassword(password) -> app_auth(user, password)
-        }
+        let ok = app_auth(user, secret)
         throttle(ok, state)
       }),
     ]
 
     Key(app_auth) -> [
       NoAuthNeeded(False),
-      PkCheckUser,
       AuthMethods("publickey" |> charlist.from_string),
-      Pwdfun(fn(user, secret, _peer_address, state) {
-        let #(user, secret) = to_auth(user, secret)
-        let ok = case secret {
-          PublicKey(Nil) -> app_auth(user)
-          UserPassword(..) -> False
-        }
-        throttle(ok, state)
-      }),
+      KeyCb(
+        #("shore@internal@ssh_server_key_api" |> atom.create_from_string, [
+          app_auth,
+        ]),
+      ),
     ]
 
-    KeyOrPassword(app_auth) -> [
+    KeyOrPassword(password_auth:, key_auth:) -> [
       NoAuthNeeded(False),
-      PkCheckUser,
       AuthMethods(
         "publickey,keyboard-interactive,password" |> charlist.from_string,
       ),
       Pwdfun(fn(user, secret, _peer_address, state) {
         let #(user, secret) = to_auth(user, secret)
-        let ok = app_auth(user, secret)
+        let ok = password_auth(user, secret)
         throttle(ok, state)
       }),
+      KeyCb(
+        #("shore@internal@ssh_server_key_api" |> atom.create_from_string, [
+          key_auth,
+        ]),
+      ),
     ]
   }
 }
 
-type AuthState {
+pub type AuthState {
   Undefined
   AuthState(throttle: Int)
 }
@@ -101,8 +98,7 @@ pub fn serve(
   let assert Ok(_) = erlang.ensure_all_started("ssh" |> atom.create_from_string)
   let opts = [
     SshCli(#("shore@internal@ssh_cli" |> atom.create_from_string, [spec])),
-    SystemDir(config.system_directory |> charlist.from_string),
-    UserDir(config.user_directory |> charlist.from_string),
+    SystemDir(config.host_key_directory |> charlist.from_string),
     Shell(Disabled),
     Exec(Disabled),
     ParallelLogin(True),
@@ -111,10 +107,14 @@ pub fn serve(
   daemon_ffi(config.port, opts)
 }
 
-fn to_auth(user: Charlist, secret: SecretFfi) -> #(String, Secret) {
+fn to_auth(user: Charlist, secret: Charlist) -> #(String, String) {
   let user = user |> charlist.to_string
-  let secret = secret |> to_ssh_secret
+  let secret = secret |> charlist.to_string
   #(user, secret)
+}
+
+pub type PublicKey {
+  PublicKey(key: PublicUserKeyFfi)
 }
 
 //
@@ -124,17 +124,22 @@ fn to_auth(user: Charlist, secret: SecretFfi) -> #(String, Secret) {
 type PeerAddress =
   #(#(Int, Int, Int, Int), Int)
 
-type DaemonOption(model, msg) {
+pub type PublicUserKeyFfi =
+  #(#(atom.Atom, BitArray, #(atom.Atom, #(Int, Int, Int, Int))))
+
+pub type CheckKey =
+  List(fn(String, PublicKey) -> Bool)
+
+pub type DaemonOption(model, msg) {
   SystemDir(Charlist)
-  UserDir(Charlist)
   AuthMethods(Charlist)
-  Pwdfun(fn(Charlist, SecretFfi, PeerAddress, AuthState) -> #(Bool, AuthState))
+  Pwdfun(fn(Charlist, Charlist, PeerAddress, AuthState) -> #(Bool, AuthState))
   SshCli(#(atom.Atom, List(internal.Spec(model, msg))))
   NoAuthNeeded(Bool)
-  PkCheckUser
   Exec(Disabled)
   Shell(Disabled)
   ParallelLogin(Bool)
+  KeyCb(#(atom.Atom, CheckKey))
 }
 
 @external(erlang, "ssh", "daemon")
@@ -143,16 +148,26 @@ fn daemon_ffi(
   opts: List(DaemonOption(model, msg)),
 ) -> Result(process.Pid, Nil)
 
-type SecretFfi
-
-pub type Secret {
-  PublicKey(Nil)
-  UserPassword(String)
+pub type Disabled {
+  Disabled
 }
 
-@external(erlang, "shore_ffi", "to_ssh_secret")
-fn to_ssh_secret(secret: SecretFfi) -> Secret
+type SshKeyType {
+  OpensshKey
+}
 
-type Disabled {
-  Disabled
+pub type PublicUserKeyDecode =
+  List(#(PublicUserKeyFfi, List(Comment)))
+
+pub type Comment {
+  Comment(BitArray)
+}
+
+@external(erlang, "ssh_file", "decode")
+fn decode_ffi(key: String, type_: SshKeyType) -> PublicUserKeyDecode
+
+pub fn decode_key(public_key: String) -> PublicKey {
+  // TODO: we probably shouldn't assert here, what does ffi do, just panic also?
+  let assert [#(key, _comment)] = public_key |> decode_ffi(OpensshKey)
+  PublicKey(key)
 }

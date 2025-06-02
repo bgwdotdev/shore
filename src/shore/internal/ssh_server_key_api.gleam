@@ -1,9 +1,5 @@
-import gleam/bit_array
-import gleam/erlang/atom
 import gleam/erlang/charlist
-import gleam/io
-import gleam/result
-import gleam/string
+import shore/internal/ssh_server
 
 /// -behaviour(ssh_serve_key_api)
 pub type Algorithm
@@ -22,20 +18,21 @@ pub fn host_key(
   host_key_ffi(algorithm, opts)
 }
 
-pub type CheckKey =
-  List(fn(PublicUserKey, String) -> Bool)
+pub type DaemonKeyCbOption {
+  KeyCbPrivate(ssh_server.CheckKey)
+}
 
 pub fn is_auth_key(
-  key: PublicUserKey,
+  key: ssh_server.PublicUserKeyFfi,
   user: charlist.Charlist,
-  opts: CheckKey,
+  opts: List(DaemonKeyCbOption),
 ) -> Bool {
-  let assert [#(k2, _comment)] =
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII9JoJW9cu1+L5/m2uc7YPp7PB7tVGpUAZ4OWnaR36ZT bgw@bgw.dev"
-    |> decode_ffi(OpensshKey)
-    |> echo
-
-  key == k2
+  case opts {
+    [KeyCbPrivate([func]), ..] ->
+      func(user |> charlist.to_string, ssh_server.PublicKey(key))
+    _ ->
+      panic as "framework bug, there should never be more than one function passed to is_auth_key"
+  }
 }
 
 @external(erlang, "ssh_file", "host_key")
@@ -43,20 +40,3 @@ fn host_key_ffi(
   algorithm: Algorithm,
   opts: DaemonOptions,
 ) -> Result(PrivateKey, Reason)
-
-type SshKeyType {
-  OpensshKey
-}
-
-pub type PublicUserKey =
-  #(#(atom.Atom, BitArray, #(atom.Atom, #(Int, Int, Int, Int))))
-
-pub type PublicUserKeyDecode =
-  List(#(PublicUserKey, List(Comment)))
-
-pub type Comment {
-  Comment(BitArray)
-}
-
-@external(erlang, "ssh_file", "decode")
-fn decode_ffi(key: String, type_: SshKeyType) -> PublicUserKeyDecode

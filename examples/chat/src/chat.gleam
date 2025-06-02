@@ -5,6 +5,7 @@ import gleam/option.{None, Some}
 import shore
 import shore/key
 import shore/layout
+import shore/ssh
 import shore/style
 import shore/ui
 
@@ -21,7 +22,18 @@ pub fn main() {
       keybinds: shore.default_keybinds(),
       redraw: shore.on_timer(16),
     )
-  let assert Ok(_) = shore.start_ssh(spec)
+  let config =
+    ssh.config(
+      port: 2222,
+      host_key_directory: ".",
+      auth: ssh.auth_public_key(fn(username, public_key) {
+        let challenge =
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII9JoJW9cu1+L5/m2uc7YPp7PB7tVGpUAZ4OWnaR36ZT bgw@bgw.dev"
+          |> ssh.to_public_key
+        challenge == public_key && username == "bgw"
+      }),
+    )
+  let assert Ok(_) = ssh.start(spec, config)
   process.sleep_forever()
 }
 
