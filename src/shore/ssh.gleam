@@ -13,7 +13,8 @@ pub fn config(
   ssh_server.Config(port:, host_key_directory:, auth:)
 }
 
-/// Starts an ssh server which will provide the application to connecting clients
+/// Starts an ssh server which will provide the application to connecting clients.
+///
 pub fn start(
   spec: internal.Spec(model, msg),
   config: ssh_server.Config,
@@ -24,6 +25,7 @@ pub fn start(
 }
 
 /// Allow anyone to connect without requiring a password or public key
+///
 pub fn auth_anonymous() -> ssh_server.Auth {
   ssh_server.Anonymous
 }
@@ -45,6 +47,7 @@ pub fn auth_anonymous() -> ssh_server.Auth {
 ///   config(auth:, ..)
 /// }
 /// ```
+///
 pub fn auth_password(auth: fn(String, String) -> Bool) -> ssh_server.Auth {
   ssh_server.Password(auth:)
 }
@@ -72,31 +75,20 @@ pub fn auth_password(auth: fn(String, String) -> Bool) -> ssh_server.Auth {
 ///   config(auth:, ..)
 /// }
 /// ```
+///
 pub fn auth_public_key(
   auth: fn(String, ssh_server.PublicKey) -> Bool,
 ) -> ssh_server.Auth {
   ssh_server.Key(auth)
 }
 
-/// Provide public key challenge, falling back to paswsord challenge if no
+/// Provide public key challenge, falling back to password challenge if no
 /// matching public key.
 ///
-/// ## Example
+/// Alternatively, uses can set their preferred auth method via the `-o PreferredAuthentications=password,publickey`.
 ///
-/// ```
-/// fn user_login(username: String, secret: Secret) -> Bool {
-///   case username, secret {
-///     "Joe", UserPassword("Hello!") -> True
-///     _, PublicKey(Nil) -> True
-///     _, _ -> False
-///   }
-/// }
+/// See individual examples for `auth_public_key` and `auth_password` for implementation.
 ///
-/// fn main() {
-///   let auth = auth_public_key_or_password(user_login)
-///   config(auth:, ..)
-/// }
-/// ```
 pub fn auth_public_key_or_password(
   password_auth password_auth: fn(String, String) -> Bool,
   key_auth key_auth: fn(String, PublicKey) -> Bool,
@@ -112,6 +104,7 @@ pub fn auth_public_key_or_password(
 /// "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOE7rwqgX3K2Cj8wY/gAOiEQ0T9lEINdNwFq9HEVXB71 username@shore"
 /// |> to_public_key
 /// ```
+///
 pub fn to_public_key(public_key: String) -> PublicKey {
   ssh_server.decode_key(public_key)
 }
