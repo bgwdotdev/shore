@@ -2,7 +2,6 @@ import gleam/erlang/process
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
-import gleam/otp/task
 import gleam/result
 import gleam/string
 import shore
@@ -286,20 +285,14 @@ fn read_directory(dir: String) -> fn() -> Msg {
 fn files_info(items: List(String), work_dir: List(String)) -> fn() -> Msg {
   fn() {
     list.map(items, fn(item) {
-      fn() {
-        let path = item |> relative_path(work_dir)
-        simplifile.file_info(path)
-        |> result.try_recover(fn(_) { simplifile.link_info(path) })
-        |> result.map_error(ErrSimplifile(_, item))
-        |> result.map(fn(info) {
-          File(name: item, info:, type_: simplifile.file_info_type(info), path:)
-        })
-      }
-      |> task.async
+      let path = item |> relative_path(work_dir)
+      simplifile.file_info(path)
+      |> result.try_recover(fn(_) { simplifile.link_info(path) })
+      |> result.map_error(ErrSimplifile(_, item))
+      |> result.map(fn(info) {
+        File(name: item, info:, type_: simplifile.file_info_type(info), path:)
+      })
     })
-    |> task.try_await_all(100)
-    |> list.map(result.map_error(_, ErrTask))
-    |> list.map(result.flatten)
     |> result.all
     |> GetFilesInfo
   }
@@ -339,5 +332,4 @@ fn read(file: File) -> Msg {
 
 type Err {
   ErrSimplifile(error: simplifile.FileError, file: String)
-  ErrTask(error: task.AwaitError)
 }

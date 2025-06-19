@@ -1,6 +1,5 @@
 import gleam/erlang/process.{type Subject}
 import gleam/float
-import gleam/function
 import gleam/int
 import gleam/io
 import gleam/list
@@ -65,39 +64,33 @@ pub fn start(
 ) -> Result(Subject(Event(msg)), actor.StartError) {
   raw_erl()
   { c(HideCursor) <> c(AltBuffer) } |> io.print
-  use shore <- result.map(shore_start(spec))
-  process.start(fn() { read_input(shore, spec.keybinds.exit) }, True)
+  use actor.Started(data: shore, ..) <- result.map(shore_start(spec))
+  process.spawn(fn() { read_input(shore, spec.keybinds.exit) })
   redraw_on_timer(spec, shore)
   shore
 }
 
 fn shore_start(spec: Spec(model, msg)) {
-  actor.Spec(
-    init: fn() {
-      let tasks = process.new_subject()
-      let #(model, task_init) = spec.init()
-      let assert Ok(width) = terminal_columns()
-      let assert Ok(height) = terminal_rows()
-      let state =
-        State(
-          spec:,
-          model:,
-          width:,
-          height:,
-          tasks:,
-          last_input: "",
-          focused: None,
-        )
-      let _first_paint = model |> spec.view |> render(state, _, key.Null)
-      let queue =
-        process.new_selector() |> process.selecting(tasks, function.identity)
-      task_init |> task_handler(tasks)
-      actor.Ready(state, queue)
-    },
-    init_timeout: 1000,
-    loop: shore_loop,
-  )
-  |> actor.start_spec
+  actor.new_with_initialiser(1000, fn(tasks) {
+    let #(model, task_init) = spec.init()
+    let assert Ok(width) = terminal_columns()
+    let assert Ok(height) = terminal_rows()
+    let state =
+      State(
+        spec:,
+        model:,
+        width:,
+        height:,
+        tasks:,
+        last_input: "",
+        focused: None,
+      )
+    let _first_paint = model |> spec.view |> render(state, _, key.Null)
+    task_init |> task_handler(tasks)
+    Ok(actor.returning(actor.initialised(state), tasks))
+  })
+  |> actor.on_message(shore_loop)
+  |> actor.start
 }
 
 //
@@ -142,7 +135,7 @@ pub fn exit() -> Event(msg) {
   Exit
 }
 
-fn shore_loop(event: Event(msg), state: State(model, msg)) {
+fn shore_loop(state: State(model, msg), event: Event(msg)) {
   case event {
     Cmd(msg) -> {
       let #(model, tasks) = state.spec.update(state.model, msg)
@@ -243,7 +236,7 @@ fn shore_loop(event: Event(msg), state: State(model, msg)) {
     Exit -> {
       { c(ShowCursor) <> c(MainBuffer) } |> io.print
       process.send(state.spec.exit, Nil)
-      actor.Stop(process.Normal)
+      actor.stop()
     }
   }
 }
@@ -323,7 +316,7 @@ fn redraw_on_timer(spec: Spec(model, msg), shore: Subject(Event(msg))) {
   case spec.redraw {
     OnUpdate -> Nil
     OnTimer(x) -> {
-      process.start(fn() { do_redraw_on_timer(shore, x) }, True)
+      process.spawn(fn() { do_redraw_on_timer(shore, x) })
       Nil
     }
   }
@@ -353,7 +346,7 @@ fn redraw_on_update(state: State(model, msg), input: Key) -> Nil {
 fn task_handler(tasks: List(fn() -> msg), queue: Subject(Event(msg))) -> Nil {
   list.each(tasks, fn(task) {
     fn() { task() |> Cmd |> process.send(queue, _) }
-    |> process.start(False)
+    |> process.spawn_unlinked()
   })
 }
 
