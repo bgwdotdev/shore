@@ -1,7 +1,5 @@
-import gleam/erlang/atom.{type Atom}
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process.{type Pid, type Subject}
-import gleam/io
 import gleam/option.{Some}
 import gleam/otp/actor
 import gleam/string
@@ -14,6 +12,8 @@ pub type TODO
 //
 // API NOW
 //
+
+pub type HandleMsgFfi
 
 // https://www.erlang.org/doc/apps/ssh/ssh_client_channel.html#c:handle_msg/2
 pub opaque type HandleMsg {
@@ -70,13 +70,8 @@ pub type State(msg) {
   State(ssh_pid: Pid, channel_id: Int, shore: Subject(shore.Event(msg)))
 }
 
-pub type StartOpt
-
-pub type TTY
-
 // TODO: error handling
 pub fn init(args: List(internal.Spec(model, msg))) -> Continue(Init(model, msg)) {
-  echo args
   // NOTE: Second arg here is the atom `disabled` passed by setting `Exec(Disabled)`
   let assert [spec, _] = args
     as "PANIC: This crash is framework bug caused by bad use of ffi and should never ever happen"
@@ -88,7 +83,7 @@ type RendererState {
 }
 
 pub fn handle_msg(
-  msg: HandleMsg,
+  msg: HandleMsgFfi,
   state: Init(model, msg),
 ) -> Continue(State(msg)) {
   let msg = msg |> to_handle_msg
@@ -109,7 +104,7 @@ pub fn handle_msg(
 }
 
 @external(erlang, "shore_ffi", "to_handle_msg")
-fn to_handle_msg(msg: HandleMsg) -> HandleMsg
+fn to_handle_msg(msg: HandleMsgFfi) -> HandleMsg
 
 fn render_loop(
   msg: String,

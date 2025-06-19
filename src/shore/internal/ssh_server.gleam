@@ -4,8 +4,6 @@ import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
 import shore/internal
 
-// TODO: do we need user directory?
-/// `system
 pub type Config {
   Config(
     /// port to expose the ssh server on
@@ -18,7 +16,6 @@ pub type Config {
   )
 }
 
-// TODO: explore auth api and options
 pub type Auth {
   Anonymous
   Password(auth: fn(String, String) -> Bool)
