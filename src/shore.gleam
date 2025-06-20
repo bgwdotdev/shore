@@ -19,6 +19,12 @@ pub type Node(msg) =
 /// keybinding for the framework level events such as exiting and ui focusing.
 /// And finally redraw for defining when the applicaiton should be redrawn, either on update messages or on a timer.
 ///
+/// `init` and `update` functions second argument `List(fn() -> Msg)` is an
+/// "effects handler". You can pass effectful/blocking code here such as requests
+/// to databases, file system io, network requests and they will be
+/// automatically passed to a separate erlang process which will call update for
+/// you on their return. See the `reader` example for practical usage examples.
+///
 /// ## Example
 /// ```
 /// import gleam/erlang/process

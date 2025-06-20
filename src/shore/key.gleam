@@ -1,3 +1,7 @@
+/// note: Many ctrl+key combinations are reserved by either the terminal (e.g.
+/// `ctrl+z`, `ctrl+s`) or by the erlang shell (e.g. `ctrl+c`). Make sure to test
+/// any ctrl+key combinations being used.
+///
 pub type Key {
   Backspace
   Enter

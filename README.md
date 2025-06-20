@@ -119,4 +119,4 @@ Shore makes use of the terminal CSI 2026 [Synchronized Output](https://gist.gith
 ## Terminal Known Issues
 
 - Terminal.App (layout issues?)
-- tmux (CSI 2026 issues?)
+- tmux with alacritty (flickering under certain conditions, debug help wanted!)

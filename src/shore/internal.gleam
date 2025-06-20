@@ -613,7 +613,7 @@ type Pos {
   Pos(x: Int, y: Int, width: Int, height: Int, align: style.Align)
 }
 
-fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
+fn render(state: State(model, msg), node: Node(msg), last_input: Key) -> Nil {
   let pos = Pos(0, 0, state.width, state.height, style.Left)
   c(BSU) |> io.print
   {
@@ -624,7 +624,8 @@ fn render(state: State(model, msg), node: Node(msg), last_input: Key) {
     |> option.unwrap("")
   }
   |> io.print
-  c(ESU) |> io.print
+  let _ = c(ESU) |> io.print
+  Nil
 }
 
 fn render_node(

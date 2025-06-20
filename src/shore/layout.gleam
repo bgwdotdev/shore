@@ -22,7 +22,7 @@ pub fn cell(
 /// areas of ui elements.
 ///
 /// Consider using some of the default provided layouts, such as
-/// `layout_center` and `layout_split` or view the examples/layouts for more
+/// `center` and `split` or view the examples/layouts for more
 /// complex custom layouts.
 ///
 /// Note: Layouts can be nested as long as it is the only child of a cell.
