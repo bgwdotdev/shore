@@ -114,7 +114,7 @@ Shore makes use of the terminal CSI 2026 [Synchronized Output](https://gist.gith
 - konsole
 - gnome-console
 - st
-- window terminal
+- windows terminal
 
 ## Terminal Known Issues
 
