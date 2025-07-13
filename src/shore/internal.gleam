@@ -34,7 +34,7 @@ type State(model, msg) {
     tasks: process.Subject(Event(msg)),
     last_input: String,
     focused: Option(Focused(msg)),
-    renderer: Option(Subject(String)),
+    renderer: Subject(String),
   )
 }
 
@@ -73,19 +73,57 @@ pub fn start_custom_renderer(
   use actor.Started(data: shore, ..) <- result.map(shore_start(spec, renderer))
   // only configure local terminal if rendering locally
   // TODO: review this
-  case renderer {
-    Some(renderer) -> {
-      actor.send(renderer, init_terminal())
-    }
-    None -> {
-      raw_erl()
-      init_terminal() |> io.print
-      process.spawn(fn() { read_input(shore) })
-      Nil
-    }
-  }
+
+  // TODO: put this back in actor.send(renderer, init_terminal())
   redraw_on_timer(spec, shore)
   shore
+}
+
+fn configure_renderer(
+  renderer: Option(Subject(String)),
+  shore: Subject(Event(msg)),
+  size: #(Int, Int),
+) -> Result(Subject(String), String) {
+  case renderer {
+    Some(renderer) -> Ok(renderer)
+    None ->
+      case default_renderer() {
+        Ok(actor.Started(data: renderer, ..)) -> {
+          raw_erl()
+          process.spawn(fn() { default_resize(shore, size) })
+          process.spawn(fn() { read_input(shore) })
+          Ok(renderer)
+        }
+        // cant return start error when inside an actor initialiser
+        Error(error) -> Error(string.inspect(error))
+      }
+  }
+}
+
+fn default_resize(shore: Subject(Event(msg)), size: #(Int, Int)) {
+  let assert Ok(width) = terminal_columns()
+  let assert Ok(height) = terminal_rows()
+  let new_size = #(width, height)
+  let size = case size == new_size {
+    True -> size
+    False -> {
+      process.send(shore, Resize(new_size.0, new_size.1))
+      new_size
+    }
+  }
+  process.sleep(16)
+  default_resize(shore, size)
+}
+
+fn default_renderer() {
+  actor.new(Nil)
+  |> actor.on_message(default_renderer_loop)
+  |> actor.start
+}
+
+fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
+  msg |> io.print
+  actor.continue(state)
 }
 
 fn shore_start(
@@ -96,6 +134,9 @@ fn shore_start(
     let #(model, task_init) = spec.init()
     let assert Ok(width) = terminal_columns()
     let assert Ok(height) = terminal_rows()
+    use renderer <- result.try(
+      configure_renderer(renderer, tasks, #(width, height)),
+    )
     let state =
       State(
         spec:,
@@ -107,6 +148,7 @@ fn shore_start(
         focused: None,
         renderer:,
       )
+    actor.send(renderer, init_terminal())
     let _first_paint = model |> spec.view |> render(state, _, key.Null)
     task_init |> task_handler(tasks)
     Ok(actor.returning(actor.initialised(state), tasks))
@@ -172,7 +214,6 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
       let #(model, tasks) = state.spec.update(state.model, msg)
       tasks |> task_handler(state.tasks)
       let state = State(..state, model: model)
-      let state = update_viewport(state)
       redraw_on_update(state, key.Null)
       actor.continue(state)
     }
@@ -196,7 +237,6 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
           }
 
           // render
-          let state = update_viewport(state)
           redraw_on_update(state, input)
           state
         }
@@ -210,7 +250,6 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
                     state.spec.update(state.model, focused.event(focused.value))
                   tasks |> task_handler(state.tasks)
                   let state = State(..state, focused: Some(focused), model:)
-                  let state = update_viewport(state)
                   redraw_on_update(state, input)
                   state
                 }
@@ -221,7 +260,6 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
                         state.spec.update(state.model, focused.event)
                       tasks |> task_handler(state.tasks)
                       let state = State(..state, focused: Some(focused), model:)
-                      let state = update_viewport(state)
                       redraw_on_update(state, input)
                       state
                     }
@@ -233,7 +271,6 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
             // Element has disappeared from screen for reasons
             None -> {
               let state = State(..state, focused: None)
-              let state = update_viewport(state)
               redraw_on_update(state, input)
               state
             }
@@ -263,7 +300,6 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
       actor.continue(state)
     }
     Redraw -> {
-      let state = update_viewport(state)
       redraw(state, key.Null)
       actor.continue(state)
     }
@@ -272,26 +308,12 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
       actor.continue(state)
     }
     Exit -> {
-      // TODO: local renderer should be an actor too?
-      case state.renderer {
-        Some(renderer) -> actor.send(renderer, restore_terminal())
-        None -> restore_terminal() |> io.print
-      }
-      process.send(state.spec.exit, Nil)
+      actor.send(state.renderer, restore_terminal())
+      // sleep to give a grace for restore terminal to complete
+      // probably better to refactor this into process.call
+      process.sleep(16)
+      actor.send(state.spec.exit, Nil)
       actor.stop()
-    }
-  }
-}
-
-fn update_viewport(state: State(model, msg)) -> State(model, msg) {
-  // only read local terminal size if rendering locally
-  // TODO: review this
-  case state.renderer {
-    Some(_) -> state
-    None -> {
-      let assert Ok(width) = terminal_columns()
-      let assert Ok(height) = terminal_rows()
-      State(..state, width:, height:)
     }
   }
 }
@@ -675,10 +697,7 @@ fn render(state: State(model, msg), node: Node(msg), last_input: Key) -> Nil {
     },
     c(ESU),
   ]
-  case state.renderer {
-    Some(renderer) -> render |> list.each(process.send(renderer, _))
-    None -> render |> list.each(io.print)
-  }
+  render |> list.each(process.send(state.renderer, _))
   Nil
 }
 
