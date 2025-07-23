@@ -235,9 +235,6 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
             }
             State(..state, model:)
           }
-
-          // render
-          redraw_on_update(state, input)
           state
         }
         Some(focused) -> {
@@ -249,9 +246,7 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
                   let #(model, tasks) =
                     state.spec.update(state.model, focused.event(focused.value))
                   tasks |> task_handler(state.tasks)
-                  let state = State(..state, focused: Some(focused), model:)
-                  redraw_on_update(state, input)
-                  state
+                  State(..state, focused: Some(focused), model:)
                 }
                 FocusedButton(..) as focused -> {
                   case input == state.spec.keybinds.submit {
@@ -259,9 +254,7 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
                       let #(model, tasks) =
                         state.spec.update(state.model, focused.event)
                       tasks |> task_handler(state.tasks)
-                      let state = State(..state, focused: Some(focused), model:)
-                      redraw_on_update(state, input)
-                      state
+                      State(..state, focused: Some(focused), model:)
                     }
                     False -> state
                   }
@@ -269,11 +262,7 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
               }
             }
             // Element has disappeared from screen for reasons
-            None -> {
-              let state = State(..state, focused: None)
-              redraw_on_update(state, input)
-              state
-            }
+            None -> State(..state, focused: None)
           }
         }
       }
@@ -297,6 +286,7 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) {
         }
         None -> state
       }
+      redraw_on_update(state, input)
       actor.continue(state)
     }
     Redraw -> {
