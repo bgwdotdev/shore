@@ -497,7 +497,13 @@ fn focus_current(
     [] -> None
     [x, ..xs] ->
       case x.label == focused.label {
-        True -> Some(x)
+        True ->
+          case x, focused {
+            FocusedInput(..) as new, FocusedInput(..) as old ->
+              FocusedInput(..new, cursor: old.cursor, offset: old.offset)
+            new, _old -> new
+          }
+          |> Some
         False -> focus_current(xs, focused)
       }
   }
