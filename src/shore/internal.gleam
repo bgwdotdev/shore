@@ -60,70 +60,28 @@ type Focused(msg) {
   FocusedButton(label: String, event: msg)
 }
 
+//
+// START
+//
+
 pub fn start(
   spec: Spec(model, msg),
 ) -> Result(Subject(Event(msg)), actor.StartError) {
   start_custom_renderer(spec, None)
 }
 
+// note: custom renderers should handle the following:
+// drawing to screen
+// resize events
+// reading user input
+
 pub fn start_custom_renderer(
   spec: Spec(model, msg),
   renderer: Option(Subject(String)),
 ) -> Result(Subject(Event(msg)), actor.StartError) {
   use actor.Started(data: shore, ..) <- result.map(shore_start(spec, renderer))
-  // only configure local terminal if rendering locally
-  // TODO: review this
-
-  // TODO: put this back in actor.send(renderer, init_terminal())
   redraw_on_timer(spec, shore)
   shore
-}
-
-fn configure_renderer(
-  renderer: Option(Subject(String)),
-  shore: Subject(Event(msg)),
-  size: #(Int, Int),
-) -> Result(Subject(String), String) {
-  case renderer {
-    Some(renderer) -> Ok(renderer)
-    None ->
-      case default_renderer() {
-        Ok(actor.Started(data: renderer, ..)) -> {
-          raw_erl()
-          process.spawn(fn() { default_resize(shore, size) })
-          process.spawn(fn() { read_input(shore) })
-          Ok(renderer)
-        }
-        // cant return start error when inside an actor initialiser
-        Error(error) -> Error(string.inspect(error))
-      }
-  }
-}
-
-fn default_resize(shore: Subject(Event(msg)), size: #(Int, Int)) {
-  let assert Ok(width) = terminal_columns()
-  let assert Ok(height) = terminal_rows()
-  let new_size = #(width, height)
-  let size = case size == new_size {
-    True -> size
-    False -> {
-      process.send(shore, Resize(new_size.0, new_size.1))
-      new_size
-    }
-  }
-  process.sleep(16)
-  default_resize(shore, size)
-}
-
-fn default_renderer() {
-  actor.new(Nil)
-  |> actor.on_message(default_renderer_loop)
-  |> actor.start
-}
-
-fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
-  msg |> io.print
-  actor.continue(state)
 }
 
 fn shore_start(
@@ -155,6 +113,57 @@ fn shore_start(
   })
   |> actor.on_message(shore_loop)
   |> actor.start
+}
+
+//
+// RENDERER
+//
+
+fn configure_renderer(
+  renderer: Option(Subject(String)),
+  shore: Subject(Event(msg)),
+  size: #(Int, Int),
+) -> Result(Subject(String), String) {
+  case renderer {
+    Some(renderer) -> Ok(renderer)
+    None ->
+      case default_renderer() {
+        Ok(actor.Started(data: renderer, ..)) -> {
+          raw_erl()
+          process.spawn(fn() { default_resize(shore, size) })
+          process.spawn(fn() { read_input(shore) })
+          Ok(renderer)
+        }
+        // note: cant return start error when inside an actor initialiser
+        Error(error) -> Error(string.inspect(error))
+      }
+  }
+}
+
+fn default_renderer() -> Result(Started(Subject(String)), actor.StartError) {
+  actor.new(Nil)
+  |> actor.on_message(default_renderer_loop)
+  |> actor.start
+}
+
+fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
+  msg |> io.print
+  actor.continue(state)
+}
+
+fn default_resize(shore: Subject(Event(msg)), size: #(Int, Int)) -> Nil {
+  let assert Ok(width) = terminal_columns()
+  let assert Ok(height) = terminal_rows()
+  let new_size = #(width, height)
+  let size = case size == new_size {
+    True -> size
+    False -> {
+      process.send(shore, Resize(new_size.0, new_size.1))
+      new_size
+    }
+  }
+  process.sleep(16)
+  default_resize(shore, size)
 }
 
 //
@@ -205,7 +214,10 @@ pub fn resize(width width: Int, height height: Int) -> Event(msg) {
   Resize(width:, height:)
 }
 
-fn shore_loop(state: State(model, msg), event: Event(msg)) {
+fn shore_loop(
+  state: State(model, msg),
+  event: Event(msg),
+) -> actor.Next(State(model, msg), Event(msg)) {
   // NOTE: assign here to avoid syntax highlighting error, delete whenever fixed
   let exit = state.spec.keybinds.exit
 
@@ -373,7 +385,7 @@ pub type Redraw {
   OnTimer(ms: Int)
 }
 
-fn redraw_on_timer(spec: Spec(model, msg), shore: Subject(Event(msg))) {
+fn redraw_on_timer(spec: Spec(model, msg), shore: Subject(Event(msg))) -> Nil {
   case spec.redraw {
     OnUpdate -> Nil
     OnTimer(x) -> {
@@ -669,7 +681,6 @@ fn element_prefix(element: Element, prefix: String) -> Element {
 // RENDER
 //
 
-// TODO: unpublic
 type Pos {
   Pos(x: Int, y: Int, width: Int, height: Int, align: style.Align)
 }
@@ -1238,7 +1249,6 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
   let values = list.take(values, width)
   let lhs = string.repeat("│" <> c(MoveLeft(1)) <> c(MoveDown(1)), height)
   let btm = string.repeat("─", width - 1)
-  // TODO: remove assert
   let content = {
     use max <- result.map(list.max(values, float.compare))
     let plot =
