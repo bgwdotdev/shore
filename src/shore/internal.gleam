@@ -164,7 +164,7 @@ fn default_resize(shore: Subject(Event(msg)), size: #(Int, Int)) -> Nil {
 fn get_chars(prompt: String, count: Int) -> String
 
 fn read_input(shore: Subject(Event(msg))) -> Nil {
-  let key = get_chars("", 10) |> key.from_string
+  let key = get_chars("", 1024) |> key.from_string
   key |> KeyPress |> process.send(shore, _)
   read_input(shore)
 }
@@ -553,7 +553,7 @@ fn input_handler(focused: Focused(msg), key: Key) -> Focused(msg) {
           )
         }
         key.Char(char) -> {
-          let cursor = focused.cursor + 1
+          let cursor = focused.cursor + string.length(char)
           let offset = input_offset(cursor, focused.offset, focused.width)
           FocusedInput(
             ..focused,
