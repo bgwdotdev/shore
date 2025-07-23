@@ -2,5 +2,4 @@
 *.ez
 /build
 erl_crash.dump
-/examples/*/manifest.toml
-/examples/*/build
+/examples/build
