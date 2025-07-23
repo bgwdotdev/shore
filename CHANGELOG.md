@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- backend: add support for custom renderers to support `beach` companion project which allows serving shore apps over ssh
+
+### Fixed
+
+- draw: fix ui drawing issue when using on_update with focusable items
+
 ## [1.1.0] - 2025-06-20
 
 ### Added
