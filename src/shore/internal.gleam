@@ -32,7 +32,6 @@ type State(model, msg) {
     width: Int,
     height: Int,
     tasks: process.Subject(Event(msg)),
-    last_input: String,
     focused: Option(Focused(msg)),
     renderer: Subject(String),
   )
@@ -96,16 +95,7 @@ fn shore_start(
       configure_renderer(renderer, tasks, #(width, height)),
     )
     let state =
-      State(
-        spec:,
-        model:,
-        width:,
-        height:,
-        tasks:,
-        last_input: "",
-        focused: None,
-        renderer:,
-      )
+      State(spec:, model:, width:, height:, tasks:, focused: None, renderer:)
     actor.send(renderer, init_terminal())
     let _first_paint = model |> spec.view |> render(state, _, key.Null)
     task_init |> task_handler(tasks)
