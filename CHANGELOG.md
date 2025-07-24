@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - backend: add support for custom renderers to support `beach` companion project which allows serving shore apps over ssh
+- spec: add `spec_with_subject` function which provides support for passing an shore `msg` subject to the init function for use inside shore applications
 
 ### Fixed
 

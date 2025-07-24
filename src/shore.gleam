@@ -55,6 +55,28 @@ pub fn spec(
   keybinds keybinds: internal.Keybinds,
   redraw redraw: internal.Redraw,
 ) -> internal.Spec(model, msg) {
+  spec_with_subject(
+    init: fn(_) { init() },
+    view:,
+    update:,
+    exit:,
+    keybinds:,
+    redraw:,
+  )
+}
+
+/// A variant of `spec` which provides a subject of the shore actor to the
+/// `init` function. Messages can be send to your application through this
+/// subject via `actor.send`
+///
+pub fn spec_with_subject(
+  init init: fn(Subject(msg)) -> #(model, List(fn() -> msg)),
+  view view: fn(model) -> internal.Node(msg),
+  update update: fn(model, msg) -> #(model, List(fn() -> msg)),
+  exit exit: Subject(Nil),
+  keybinds keybinds: internal.Keybinds,
+  redraw redraw: internal.Redraw,
+) -> internal.Spec(model, msg) {
   internal.Spec(init:, view:, update:, exit:, keybinds:, redraw:)
 }
 
@@ -98,12 +120,22 @@ pub fn default_keybinds() -> internal.Keybinds {
 /// Allows sending a message to your TUI from another actor. This can be used,
 /// for example, to push an event to your TUI, rather than have it poll.
 ///
+/// ## Example
+/// ```gleam
+/// actor.send(shore, shore.send(MyMsg))
+/// ```
+///
 pub fn send(msg: msg) -> internal.Event(msg) {
   internal.send(msg)
 }
 
 /// Manually trigger the exit for your TUI. Normally this would be handled
 /// through the exit keybind.
+///
+/// ## Example
+/// ```gleam
+/// actor.send(shore, shore.exit())
+/// ```
 ///
 pub fn exit() -> Event(msg) {
   internal.exit()

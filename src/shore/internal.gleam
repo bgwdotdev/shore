@@ -16,7 +16,7 @@ import shore/style
 
 pub type Spec(model, msg) {
   Spec(
-    init: fn() -> #(model, List(fn() -> msg)),
+    init: fn(process.Subject(msg)) -> #(model, List(fn() -> msg)),
     view: fn(model) -> Node(msg),
     update: fn(model, msg) -> #(model, List(fn() -> msg)),
     exit: process.Subject(Nil),
@@ -88,7 +88,8 @@ fn shore_start(
   renderer: Option(Subject(String)),
 ) -> Result(Started(Subject(Event(msg))), actor.StartError) {
   actor.new_with_initialiser(1000, fn(tasks) {
-    let #(model, task_init) = spec.init()
+    let subj = process.new_subject()
+    let #(model, task_init) = spec.init(subj)
     let assert Ok(width) = terminal_columns()
     let assert Ok(height) = terminal_rows()
     use renderer <- result.try(
@@ -99,7 +100,17 @@ fn shore_start(
     actor.send(renderer, init_terminal())
     let _first_paint = model |> spec.view |> render(state, _, key.Null)
     task_init |> task_handler(tasks)
-    Ok(actor.returning(actor.initialised(state), tasks))
+
+    let selector =
+      process.new_selector()
+      |> process.select(tasks)
+      |> process.select_map(subj, Cmd)
+
+    state
+    |> actor.initialised
+    |> actor.selecting(selector)
+    |> actor.returning(tasks)
+    |> Ok
   })
   |> actor.on_message(shore_loop)
   |> actor.start
