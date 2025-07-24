@@ -52,6 +52,7 @@ type Focused(msg) {
     label: String,
     value: String,
     event: fn(String) -> msg,
+    submit: Option(msg),
     cursor: Int,
     offset: Int,
     width: Int,
@@ -256,10 +257,26 @@ fn shore_loop(
             Some(focused) -> {
               case input_handler(focused, input) {
                 FocusedInput(..) as focused -> {
-                  let #(model, tasks) =
-                    state.spec.update(state.model, focused.event(focused.value))
-                  tasks |> task_handler(state.tasks)
-                  State(..state, focused: Some(focused), model:)
+                  case input == state.spec.keybinds.submit, focused.submit {
+                    True, Some(event) -> {
+                      let #(model, tasks) =
+                        state.spec.update(state.model, event)
+                      let reload =
+                        list_focusable([state.spec.view(model)], state)
+                        |> focus_current(focused)
+                      tasks |> task_handler(state.tasks)
+                      State(..state, focused: reload, model:)
+                    }
+                    _, _ -> {
+                      let #(model, tasks) =
+                        state.spec.update(
+                          state.model,
+                          focused.event(focused.value),
+                        )
+                      tasks |> task_handler(state.tasks)
+                      State(..state, focused: Some(focused), model:)
+                    }
+                  }
                 }
                 FocusedButton(..) as focused -> {
                   case input == state.spec.keybinds.submit {
@@ -330,7 +347,7 @@ fn detect_event(
   case node {
     Button(key:, event:, ..) if input == key -> Some(event)
     Button(..) -> None
-    KeyBind(key, event) if input == key -> Some(event)
+    KeyBind(key:, event:) if input == key -> Some(event)
     KeyBind(..) -> None
     Aligned(node:, ..) | Bar2(node:, ..) -> detect_event(state, node, input)
     Row(children:) | Col(children:) | Box(children:, ..) ->
@@ -456,11 +473,19 @@ fn do_list_focusable(
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
           |> list.flatten
         }
-        Input(label, value, width, event, _) -> {
+        Input(label:, value:, width:, event:, submit:, hidden: _) -> {
           let cursor = string.length(value)
           let width = calc_size_input(width, pos.width, label)
           let focused =
-            FocusedInput(label:, value:, event:, offset: 0, cursor:, width:)
+            FocusedInput(
+              label:,
+              value:,
+              event:,
+              submit:,
+              offset: 0,
+              cursor:,
+              width:,
+            )
           let offset = input_offset(cursor, focused.offset, focused.width)
           do_list_focusable(pos, xs, [FocusedInput(..focused, offset:), ..acc])
         }
@@ -511,7 +536,17 @@ fn focus_current(
         True ->
           case x, focused {
             FocusedInput(..) as new, FocusedInput(..) as old ->
-              FocusedInput(..new, cursor: old.cursor, offset: old.offset)
+              case old.cursor > string.length(new.value) {
+                True ->
+                  FocusedInput(
+                    ..new,
+                    cursor: string.length(new.value),
+                    offset: 0,
+                  )
+                False ->
+                  FocusedInput(..new, cursor: old.cursor, offset: old.offset)
+              }
+
             new, _old -> new
           }
           |> Some
@@ -810,7 +845,7 @@ fn render_node(
       |> Some
     }
     KeyBind(..) -> None
-    Input(label, value, width, _event, hidden) -> {
+    Input(label:, value:, width:, event: _, submit: _, hidden:) -> {
       let width = calc_size_input(width, pos.width, label)
       let #(is_focused, cursor) = case state.focused {
         Some(FocusedInput(..) as focused) if focused.label == label -> #(
@@ -900,6 +935,7 @@ pub type Node(msg) {
     value: String,
     width: style.Size,
     event: fn(String) -> msg,
+    submit: Option(msg),
     hidden: Bool,
   )
   /// A horizontal line

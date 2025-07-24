@@ -69,7 +69,7 @@ pub fn input(
   width: style.Size,
   event: fn(String) -> msg,
 ) -> Node(msg) {
-  internal.Input(label, value, width, event, hidden: False)
+  internal.Input(label:, value:, width:, event:, submit: None, hidden: False)
 }
 
 /// A field for text input with the content display hidden, useful for password fields
@@ -79,7 +79,24 @@ pub fn input_hidden(
   width: style.Size,
   event: fn(String) -> msg,
 ) -> Node(msg) {
-  internal.Input(label, value, width, event, hidden: True)
+  internal.Input(label:, value:, width:, event:, submit: None, hidden: True)
+}
+
+/// A field for text input. Allows setting a `submit` event which can be
+/// triggered by the submit keybind while the field is currently focused.
+///
+/// Useful for scenarios where a separate submit button would be inconvenient,
+/// such as a chat box or 2fa prompt.
+///
+pub fn input_submit(
+  label: String,
+  value: String,
+  width: style.Size,
+  event: fn(String) -> msg,
+  submit: msg,
+  hidden: Bool,
+) -> Node(msg) {
+  internal.Input(label:, value:, width:, event:, submit: Some(submit), hidden:)
 }
 
 /// A non-visible button assigned to a key press to execute an event
