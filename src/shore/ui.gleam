@@ -30,7 +30,38 @@ pub fn br() -> Node(msg) {
 
 /// A button assigned to a key press to execute an event
 pub fn button(text: String, key: Key, event: msg) -> Node(msg) {
-  internal.Button(text, key, event)
+  internal.Button(
+    text:,
+    key:,
+    event:,
+    fg: Some(style.Black),
+    bg: Some(style.Blue),
+    focus_fg: Some(style.Black),
+    focus_bg: Some(style.Green),
+  )
+}
+
+/// A button assigned to a key press to execute an event.
+/// Can be provided with custom colours both for when focused/pressed or not.
+///
+/// Default colors for buttons are:
+/// ```gleam
+///  fg: Some(style.Black),
+///  bg: Some(style.Blue),
+///  focus_fg: Some(style.Black),
+///  focus_bg: Some(style.Green),
+/// ```
+///
+pub fn button_styled(
+  text: String,
+  key: Key,
+  event: msg,
+  fg: Option(style.Color),
+  bg: Option(style.Color),
+  focus_fg: Option(style.Color),
+  focus_bg: Option(style.Color),
+) -> Node(msg) {
+  internal.Button(text:, key:, event:, fg:, bg:, focus_fg:, focus_bg:)
 }
 
 /// A container element for holding other nodes over multiple lines

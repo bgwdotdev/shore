@@ -110,8 +110,16 @@ fn view(model: Model) -> shore.Node(Msg) {
     model.counter |> int.to_string |> ui.text_styled(Some(style.White), None),
     ui.br(),
     ui.row([
-      ui.button("Increment", key.Char("a"), Increment),
-      ui.button("Decrement", key.Char("b"), Decrement),
+      ui.button("a: Increment", key.Char("a"), Increment),
+      ui.button_styled(
+        "b: Decrement",
+        key.Char("b"),
+        Decrement,
+        None,
+        None,
+        Some(style.Black),
+        Some(style.Green),
+      ),
     ]),
     case model.counter {
       x if x > 10 && x < 20 -> ui.button("reset", key.Char("r"), SendReset)

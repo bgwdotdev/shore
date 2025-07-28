@@ -829,18 +829,22 @@ fn render_node(
         points,
       )
       |> Some
-    Button(text, input, _) -> {
+    Button(text:, key:, event: _, fg:, bg:, focus_fg:, focus_bg:) -> {
       let is_focused = case state.focused {
         Some(FocusedButton(..) as focused) if focused.label == text -> True
         _ -> False
       }
       draw_btn(Btn(
-        pos.width,
-        1,
-        "",
-        text,
-        last_input == input || is_focused,
-        pos.align,
+        width: pos.width,
+        height: 1,
+        title: "",
+        text:,
+        pressed: last_input == key || is_focused,
+        align: pos.align,
+        fg:,
+        bg:,
+        focus_fg:,
+        focus_bg:,
       ))
       |> Some
     }
@@ -953,7 +957,15 @@ pub type Node(msg) {
   /// A multi-line text string
   TextMulti(text: String, fg: Option(style.Color), bg: Option(style.Color))
   /// A button assigned to a key press to execute an event
-  Button(text: String, key: Key, event: msg)
+  Button(
+    text: String,
+    key: Key,
+    event: msg,
+    fg: Option(style.Color),
+    bg: Option(style.Color),
+    focus_fg: Option(style.Color),
+    focus_bg: Option(style.Color),
+  )
   /// A non-visible button assigned to a key press to execute an event
   KeyBind(key: Key, event: msg)
   /// Sets alignment of all child nodes
@@ -1145,6 +1157,10 @@ type Btn {
     text: String,
     pressed: Bool,
     align: style.Align,
+    fg: Option(style.Color),
+    bg: Option(style.Color),
+    focus_fg: Option(style.Color),
+    focus_bg: Option(style.Color),
   )
 }
 
@@ -1155,11 +1171,15 @@ fn draw_btn(btn: Btn) -> Element {
   let width = string.length(button)
   let button = button |> calc_align(btn.align, btn.width)
   let bg = case btn.pressed {
-    False -> style.Blue |> Bg |> c
-    True -> style.Green |> Bg |> c
+    False -> btn.bg
+    True -> btn.focus_bg
   }
-  [bg, c(Fg(style.Black)), button, c(Reset)]
-  |> string.join("")
+  let fg = case btn.pressed {
+    False -> btn.fg
+    True -> btn.focus_fg
+  }
+  button
+  |> style_text(fg, bg)
   |> Element(width:, height: 1)
 }
 
