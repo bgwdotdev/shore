@@ -1,6 +1,7 @@
 import shore/internal
 import shore/style
 
+/// A container item in a Grid
 pub type Cell(msg) =
   internal.Cell(msg)
 

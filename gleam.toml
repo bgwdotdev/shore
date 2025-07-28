@@ -19,3 +19,8 @@ gleam_otp = ">= 1.0.0 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
+
+[documentation]
+pages = [
+  { title = "CHANGELOG", path = "changelog.html", source = "CHANGELOG.md" }
+]

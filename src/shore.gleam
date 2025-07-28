@@ -11,6 +11,10 @@ pub type Event(msg) =
 pub type Node(msg) =
   internal.Node(msg)
 
+/// A container item in a Grid
+pub type Cell(msg) =
+  internal.Cell(msg)
+
 /// A shore application is made up of these base parts. Following The Elm
 /// Architecture, you must define an init, view and update function which shore
 /// will handle calling.
