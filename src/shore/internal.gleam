@@ -873,7 +873,8 @@ fn render_node(
       ))
       |> Some
     }
-    TextMulti(text, fg, bg) -> draw_text_multi(text, fg, bg, pos) |> Some
+    TextMulti(text:, wrap:, fg:, bg:) ->
+      draw_text_multi(text, wrap, fg, bg, pos) |> Some
 
     HR ->
       string.repeat("─", pos.width)
@@ -950,7 +951,12 @@ pub type Node(msg) {
   /// An empty line
   BR
   /// A multi-line text string
-  TextMulti(text: String, fg: Option(style.Color), bg: Option(style.Color))
+  TextMulti(
+    text: String,
+    wrap: TextWrap,
+    fg: Option(style.Color),
+    bg: Option(style.Color),
+  )
   /// A button assigned to a key press to execute an event
   Button(
     text: String,
@@ -1052,8 +1058,14 @@ fn style_text(
   <> c(Reset)
 }
 
+pub type TextWrap {
+  Wrap
+  NoWrap
+}
+
 fn draw_text_multi(
   text: String,
+  wrap: TextWrap,
   fg: Option(style.Color),
   bg: Option(style.Color),
   pos: Pos,
@@ -1064,7 +1076,7 @@ fn draw_text_multi(
     c(SavePos)
     <> {
       text
-      |> string.split("\n")
+      |> text_wrap(wrap, width - 1)
       |> list.take(height)
       |> list.map(string.slice(_, 0, width))
       |> list.map(calc_align(_, pos.align, pos.width))
@@ -1075,6 +1087,53 @@ fn draw_text_multi(
   text
   |> style_text(fg, bg)
   |> Element(width:, height:)
+}
+
+fn text_wrap(text: String, wrap: TextWrap, width: Int) -> List(String) {
+  case wrap {
+    Wrap -> text_wrap_loop(string.to_graphemes(text), width, 0, [], [], [])
+    NoWrap -> text |> string.split("\n")
+  }
+}
+
+fn text_wrap_loop(
+  text: List(String),
+  width: Int,
+  count: Int,
+  word: List(String),
+  line: List(String),
+  acc: List(String),
+) -> List(String) {
+  let append = fn(current, acc) {
+    let str = current |> list.reverse |> string.join("")
+    [str, ..acc]
+  }
+  case text {
+    ["\n", ..xs] -> text_wrap_loop(xs, width, 0, [], [], append(line, acc))
+    [" ", ..xs] ->
+      text_wrap_loop(
+        xs,
+        width,
+        count + 1,
+        [],
+        list.append([" ", ..word], line),
+        acc,
+      )
+    [x, ..xs] ->
+      case count >= width {
+        True ->
+          text_wrap_loop(
+            list.append(list.reverse([x, ..word]), xs),
+            width,
+            0,
+            [],
+            [],
+            append(line, acc),
+          )
+        False -> text_wrap_loop(xs, width, count + 1, [x, ..word], line, acc)
+      }
+    [] -> append(line, acc) |> list.reverse
+  }
 }
 
 type Iput {

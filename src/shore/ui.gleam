@@ -162,7 +162,12 @@ pub fn table_kv(width: style.Size, table: List(List(String))) -> Node(msg) {
 
 /// A text string
 pub fn text(text: String) -> Node(msg) {
-  internal.TextMulti(text, None, None)
+  internal.TextMulti(text, internal.NoWrap, None, None)
+}
+
+/// A text string with automatic line wrapping
+pub fn text_wrapped(text: String) -> Node(msg) {
+  internal.TextMulti(text, internal.Wrap, None, None)
 }
 
 /// A text string with colored foreground and/or background
@@ -171,5 +176,14 @@ pub fn text_styled(
   fg: Option(style.Color),
   bg: Option(style.Color),
 ) -> Node(msg) {
-  internal.TextMulti(text, fg, bg)
+  internal.TextMulti(text, internal.NoWrap, fg, bg)
+}
+
+/// A text string with automatic line wrapping and colored foreground and/or background
+pub fn text_wrapped_styled(
+  text: String,
+  fg: Option(style.Color),
+  bg: Option(style.Color),
+) -> Node(msg) {
+  internal.TextMulti(text, internal.Wrap, fg, bg)
 }
