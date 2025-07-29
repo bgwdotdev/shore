@@ -1104,12 +1104,13 @@ fn text_wrap_loop(
   line: List(String),
   acc: List(String),
 ) -> List(String) {
-  let append = fn(current, acc) {
-    let str = current |> list.reverse |> string.join("")
-    [str, ..acc]
+  let append = fn(word, line, acc) {
+    let line = list.append(word, line) |> list.reverse |> string.join("")
+    [line, ..acc]
   }
   case text {
-    ["\n", ..xs] -> text_wrap_loop(xs, width, 0, [], [], append(line, acc))
+    ["\n", ..xs] ->
+      text_wrap_loop(xs, width, 0, [], [], append(word, line, acc))
     [" ", ..xs] ->
       text_wrap_loop(
         xs,
@@ -1128,11 +1129,11 @@ fn text_wrap_loop(
             0,
             [],
             [],
-            append(line, acc),
+            append([], line, acc),
           )
         False -> text_wrap_loop(xs, width, count + 1, [x, ..word], line, acc)
       }
-    [] -> append(line, acc) |> list.reverse
+    [] -> append(word, line, acc) |> list.reverse
   }
 }
 
