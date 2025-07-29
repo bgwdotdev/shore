@@ -367,7 +367,6 @@ fn detect_event(
     | Table(..)
     | TableKV(..)
     | Graph(..)
-    | Text(..)
     | TextMulti(..)
     | Debug -> None
   }
@@ -504,7 +503,6 @@ fn do_list_focusable(
         | Table(..)
         | TableKV(..)
         | Graph(..)
-        | Text(..)
         | TextMulti(..) -> do_list_focusable(pos, xs, acc)
       }
   }
@@ -875,7 +873,6 @@ fn render_node(
       ))
       |> Some
     }
-    Text(text, fg, bg) -> draw_text(text, fg, bg, pos) |> Some
     TextMulti(text, fg, bg) -> draw_text_multi(text, fg, bg, pos) |> Some
 
     HR ->
@@ -952,8 +949,6 @@ pub type Node(msg) {
   Bar2(color: style.Color, node: Node(msg))
   /// An empty line
   BR
-  /// A text string
-  Text(text: String, fg: Option(style.Color), bg: Option(style.Color))
   /// A multi-line text string
   TextMulti(text: String, fg: Option(style.Color), bg: Option(style.Color))
   /// A button assigned to a key press to execute an event
@@ -1043,20 +1038,6 @@ fn do_middle(width: Int, height: Int, acc: List(String)) -> String {
 fn middle(width: Int) -> String {
   let fill = " "
   ["│", string.repeat(fill, width), "│"] |> string.join("")
-}
-
-fn draw_text(
-  text: String,
-  fg: Option(style.Color),
-  bg: Option(style.Color),
-  pos: Pos,
-) -> Element {
-  let width = pos.width - 2
-  text
-  |> string.slice(0, width)
-  |> calc_align(pos.align, pos.width)
-  |> style_text(fg, bg)
-  |> Element(width:, height: 1)
 }
 
 fn style_text(
