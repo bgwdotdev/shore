@@ -9,11 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- backend: add support for custom renderers to support `beach` companion project which allows serving shore apps over ssh
-- spec: add `spec_with_subject` function which provides support for passing an shore `msg` subject to the init function for use inside shore applications
-- ui: add `input_submit` function which allows having a 'submit' event attached to an input field which will trigger when the `submit` keybind is pressed while the input field is focused
+- backend: add support for custom renderers to support `beach` companion
+  project which allows serving shore apps over ssh
+- spec: add `spec_with_subject` function which provides support for passing an
+  shore `msg` subject to the init function for use inside shore applications
+- ui: add `input_submit` function which allows having a 'submit' event attached
+  to an input field which will trigger when the `submit` keybind is pressed
+  while the input field is focused
 - ui: add `button_styled` function which allows customising button colours
 - ui: add `text_wrapped` functions which provide automatic text wrapping
+- ui: add `image_unstable` function which allows using the kitty graphics
+  protocol to display images, note that this is an unstable feature and will
+  likely be reworked and/or removed at a later date
 
 ### Fixed
 

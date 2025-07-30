@@ -368,6 +368,7 @@ fn detect_event(
     | TableKV(..)
     | Graph(..)
     | TextMulti(..)
+    | Graphic(..)
     | Debug -> None
   }
 }
@@ -503,6 +504,7 @@ fn do_list_focusable(
         | Table(..)
         | TableKV(..)
         | Graph(..)
+        | Graphic(..)
         | TextMulti(..) -> do_list_focusable(pos, xs, acc)
       }
   }
@@ -915,6 +917,7 @@ fn render_node(
       let width = calc_size(width, pos.width)
       draw_progress(width:, max:, value:, color:, pos:) |> Some
     }
+    Graphic(payload:) -> draw_graphic(payload) |> Some
   }
 }
 
@@ -989,6 +992,8 @@ pub type Node(msg) {
   Progress(width: style.Size, max: Int, value: Int, color: style.Color)
   /// Wraps a `Layout`
   Layouts(layout: Layout(msg))
+  /// A base64 image using kitty graphics protocol
+  Graphic(payload: String)
 }
 
 fn calc_size(size: style.Size, width: Int) -> Int {
@@ -1394,6 +1399,10 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
   }
 }
 
+fn draw_graphic(payload: String) -> Element {
+  Element(width: 10, height: 10, content: c(Graphics(PNG, False, payload)))
+}
+
 //
 // LAYOUT
 //
@@ -1524,6 +1533,7 @@ type TermCode {
   BSU
   /// End Synchronized Output
   ESU
+  Graphics(format: KittyFormat, compress: Bool, payload: String)
 }
 
 fn c(code: TermCode) -> String {
@@ -1551,6 +1561,8 @@ fn c(code: TermCode) -> String {
     MainBuffer -> esc <> "[?1049l"
     BSU -> esc <> "[?2026h"
     ESU -> esc <> "[?2026l"
+    Graphics(format:, compress:, payload:) ->
+      payload |> kitty_payload([]) |> kitty_code(format, compress, _, "")
   }
 }
 
@@ -1568,6 +1580,81 @@ pub fn init_terminal() -> String {
 
 pub fn restore_terminal() -> String {
   c(ShowCursor) <> c(MainBuffer)
+}
+
+//
+// KITTY GRAPHICS PROTOCOL
+//
+
+type KittyAction {
+  //Transmit
+  TransmitAndDisplay
+  //Query
+  //Put
+  //Delete
+  //TransmitAnimation
+  //ControlAnimation
+  //ComposeAnimation
+}
+
+fn kitty_action(a: KittyAction) -> String {
+  "a="
+  <> case a {
+    TransmitAndDisplay -> "T"
+  }
+}
+
+type KittyFormat {
+  RGB
+  RGBA
+  PNG
+}
+
+fn kitty_format(f: KittyFormat) -> String {
+  "f="
+  <> case f {
+    RGB -> "24"
+    RGBA -> "32"
+    PNG -> "100"
+  }
+}
+
+fn kitty_payload(base64: String, acc: List(String)) -> List(String) {
+  let size = 4096
+  case string.length(base64) {
+    len if len > size -> {
+      let chunk = string.slice(base64, 0, size)
+      let base64 = string.slice(base64, size, len)
+      kitty_payload(base64, [chunk, ..acc])
+    }
+    _ -> list.reverse([base64, ..acc])
+  }
+}
+
+fn kitty_code(
+  format: KittyFormat,
+  compress: Bool,
+  payload: List(String),
+  acc: String,
+) -> String {
+  let wrap = fn(m, payload) {
+    esc
+    <> "_G"
+    <> kitty_action(TransmitAndDisplay)
+    <> ","
+    <> kitty_format(format)
+    <> ","
+    <> m
+    <> ";"
+    <> payload
+    <> esc
+    <> "\\"
+  }
+  case payload {
+    [] -> acc
+    [x] -> kitty_code(format, compress, [], acc <> wrap("m=0", x))
+    [x, ..xs] -> kitty_code(format, compress, xs, acc <> wrap("m=1", x))
+  }
 }
 
 //

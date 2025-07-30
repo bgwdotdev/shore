@@ -1,8 +1,10 @@
+import gleam/bit_array
 import gleam/erlang/process
 import gleam/int
 import gleam/io
 import gleam/option.{None, Some}
 import gleam/pair
+import gleam/string
 import shore
 import shore/key
 import shore/style
@@ -95,9 +97,17 @@ fn view(model: Model) -> shore.Node(Msg) {
     ui.br(),
     model.bye |> ui.text,
     ui.br(),
-    ui.table_kv(style.Px(50), model.csv),
+    ui.table(style.Px(50), model.csv),
+    ui.br(),
+    ui.image_unstable(pic),
+    ui.br(),
     ui.br(),
     ui.text("hi"),
+    ui.text_wrapped(
+      "The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. 
+
+The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog.",
+    ),
     //ui.Progress(ui.Px(20), 100, model.counter, ui.Blue),
     ui.br(),
     model.counter |> int.to_string |> ui.text_styled(Some(style.Black), None),
@@ -150,3 +160,5 @@ fn reset() -> Msg {
   process.sleep(10_000)
   Reset
 }
+
+const pic = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII"
