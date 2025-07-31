@@ -48,7 +48,7 @@ pub fn main() {
 
 // MODEL
 
-pub opaque type Model {
+type Model {
   Model(counter: Int)
 }
 
@@ -60,7 +60,7 @@ fn init() -> #(Model, List(fn() -> Msg)) {
 
 // UPDATE
 
-pub opaque type Msg {
+type Msg {
   Increment
   Decrement
 }
