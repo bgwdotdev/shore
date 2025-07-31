@@ -1177,7 +1177,7 @@ fn draw_input(input: Iput) -> Element {
       }
     }
 
-  [color, input.title, " ", c(Reset), text_trim]
+  [c(Reset), color, input.title, " ", c(Reset), text_trim]
   |> string.join("")
   |> Element(width: input.width, height: input.height)
 }
