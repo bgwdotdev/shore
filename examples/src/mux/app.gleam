@@ -1,9 +1,8 @@
 import gleam/erlang/charlist.{type Charlist}
 import gleam/erlang/process
 import gleam/int
-import gleam/io
 import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import shore
@@ -175,16 +174,6 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
         Error(_) -> #(model, [])
       }
     }
-    //CreateSplit(_id, direction) -> {
-    //  let count = model.count + 1
-    //  // TODO: implement split logic
-    //  let pos = #(0, 0)
-    //  let term =
-    //    update_term(model.count, model.term, fn(term) {
-    //      Term(..term, term: Some(Term(count, "", [], None, pos)))
-    //    })
-    //  #(Model(..model, count:, term:), [])
-    //}
   }
 }
 
@@ -196,14 +185,6 @@ fn update_term(id: Int, terms: List(Term), func: fn(Term) -> Term) -> List(Term)
     }
   }
   |> list.map(terms, _)
-  //case id == term.id {
-  //  True -> func(term)
-  //  False ->
-  //    case term.term {
-  //      Some(child) -> Term(..term, term: Some(update_term(id, child, func)))
-  //      None -> term
-  //    }
-  //}
 }
 
 fn update_term_cmd(
@@ -234,7 +215,6 @@ fn view(model: Model) -> shore.Node(Msg) {
 fn view_keybinds(model: Model) -> layout.Cell(Msg) {
   layout.cell(
     ui.row([
-      ui.keybind(key.Enter, SendCommand(model.last_modified)),
       ui.keybind(key.Char("L"), Clear(model.last_modified)),
       ui.keybind(key.Char("H"), CreateSplit(model.last_modified, Horizontal)),
       ui.keybind(key.Char("V"), CreateSplit(model.last_modified, Vertical)),
@@ -246,9 +226,14 @@ fn view_keybinds(model: Model) -> layout.Cell(Msg) {
 
 fn view_term_output(term: Term) -> layout.Cell(Msg) {
   let prompt =
-    ui.input(int.to_string(term.id) <> "$", term.cmd, style.Fill, fn(str) {
-      SetCommand(term.id, str)
-    })
+    ui.input_submit(
+      int.to_string(term.id) <> "$",
+      term.cmd,
+      style.Fill,
+      fn(str) { SetCommand(term.id, str) },
+      SendCommand(term.id),
+      False,
+    )
   [prompt, ..list.map(term.output, format_output)]
   |> list.reverse
   |> ui.box(term.id |> int.to_string |> Some)
@@ -278,7 +263,7 @@ fn send_command(id: Int, cmd: String) -> fn() -> Msg {
     |> string.reverse
     |> string.pop_grapheme
     |> result.map_error(Pop)
-    |> result.then(fn(str) {
+    |> result.try(fn(str) {
       case str.0 {
         "0" -> Output(0, string.reverse(str.1), cmd) |> Ok
         "1" -> Output(1, string.reverse(str.1), cmd) |> Cmd |> Error
@@ -306,11 +291,10 @@ Keybinds:
   Ctrl+x -> quit
   H -> create horizontal split
   V -> create vertical split
-  D -> delete pane
   Tab -> cycle input focus forward
   Shift+Tab -> cycle input focus back
-  Escape -> clear focus/normal mode
-  Enter -> submit command (normal mode)
+  Escape -> clear focus
+  Enter -> submit command
   "
   Output(status: 0, text:, cmd: "help")
 }

@@ -26,7 +26,7 @@ pub fn main() {
 
 // MODEL
 
-pub opaque type Model {
+type Model {
   Model(
     page: Page,
     counter: Int,
@@ -53,7 +53,7 @@ fn init() -> #(Model, List(fn() -> Msg)) {
 
 // UPDATE
 
-pub opaque type Msg {
+type Msg {
   NoOp
   SetPage(Page)
   Increment
@@ -90,7 +90,7 @@ fn view(model: Model) -> shore.Node(Msg) {
   }
 }
 
-fn view_select(model: Model) -> shore.Node(Msg) {
+fn view_select(_model: Model) -> shore.Node(Msg) {
   [
     "Welcome!
 
@@ -120,7 +120,7 @@ fn key_select() -> shore.Node(Msg) {
   ui.keybind(key.Esc, SetPage(Select))
 }
 
-fn view_1(model: Model) -> shore.Node(Msg) {
+fn view_1(_model: Model) -> shore.Node(Msg) {
   let content = ui.box([ui.debug(), key_select()], None)
   layout.grid(
     gap: 1,
@@ -165,7 +165,7 @@ fn view_2(model: Model) -> shore.Node(Msg) {
   )
 }
 
-fn view_3(model: Model) -> shore.Node(Msg) {
+fn view_3(_model: Model) -> shore.Node(Msg) {
   layout.split(
     ui.box(
       [ui.text("username"), ui.text("password"), key_select()],

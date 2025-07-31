@@ -14,7 +14,7 @@ import shore/ui
 
 pub fn main() {
   let exit = process.new_subject()
-  let ui =
+  let _shore =
     shore.spec(
       init:,
       view:,
@@ -24,20 +24,19 @@ pub fn main() {
       redraw: shore.on_update(),
     )
     |> shore.start
-  //tick(ui)
   process.receive_forever(exit)
-}
-
-fn tick(ui: process.Subject(shore.Event(Msg))) {
-  process.send(ui, shore.send(Tick))
-  process.sleep(1000)
-  tick(ui)
 }
 
 // MODEL 
 
 type Model {
-  Model(counter: Int, hi: String, bye: String, csv: List(List(String)))
+  Model(
+    counter: Int,
+    name: String,
+    secret: String,
+    csv: List(List(String)),
+    kv: List(List(String)),
+  )
 }
 
 fn init() -> #(Model, List(fn() -> Msg)) {
@@ -48,8 +47,13 @@ fn init() -> #(Model, List(fn() -> Msg)) {
     ["jane", "54", "2024-10-10"],
     ["phil", "33", "2025-02-11"],
   ]
-  let model =
-    Model(counter: 0, hi: "abcdefghijklmnopqrstuvwxyz", bye: "abcdarsd", csv:)
+  let kv = [
+    ["server", "dev01"],
+    ["status", "up"],
+    ["ip", "192.168.1.1"],
+    ["uptime", "1 week"],
+  ]
+  let model = Model(counter: 0, name: "world", secret: "hunter2", csv:, kv:)
   #(model, [])
 }
 
@@ -64,8 +68,8 @@ type Msg {
   Reset
   Set(Int)
   Tick
-  SetHi(String)
-  SetBye(String)
+  SetName(String)
+  SetSecret(String)
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
@@ -78,8 +82,8 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
     Reset -> #(Model(..model, counter: 0), [])
     Set(i) -> #(Model(..model, counter: i), [])
     Tick -> #(Model(..model, counter: model.counter + 1), [])
-    SetHi(text) -> #(Model(..model, hi: text), [])
-    SetBye(text) -> #(Model(..model, bye: text), [])
+    SetName(name) -> #(Model(..model, name:), [])
+    SetSecret(secret) -> #(Model(..model, secret:), [])
   }
 }
 
@@ -87,30 +91,61 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 
 fn view(model: Model) -> shore.Node(Msg) {
   ui.col([
-    "HELLO WORLD" |> ui.text,
+    ui.bar2(
+      style.Blue,
+      ui.text_styled(
+        "Development Reference",
+        Some(style.Black),
+        Some(style.Blue),
+      ),
+    ),
     ui.hr(),
-    ui.input("hi:", model.hi, style.Px(20), SetHi),
     ui.br(),
-    model.hi |> ui.text,
+    header("input"),
     ui.br(),
-    ui.input("bye:", model.bye, style.Px(25), SetBye),
+    ui.input("name:", model.name, style.Px(50), SetName),
     ui.br(),
-    model.bye |> ui.text,
+    ui.text("hello " <> model.name),
+    ui.br(),
+    header("input hidden"),
+    ui.br(),
+    ui.input_hidden("secret:", model.secret, style.Px(50), SetSecret),
+    ui.br(),
+    ui.text("secret " <> model.secret),
+    ui.br(),
+    header("table"),
     ui.br(),
     ui.table(style.Px(50), model.csv),
     ui.br(),
+    header("table key value"),
+    ui.br(),
+    ui.table_kv(style.Px(50), model.kv),
+    ui.br(),
+    header("image"),
+    ui.br(),
     ui.image_unstable(pic),
     ui.br(),
+    header("text"),
     ui.br(),
-    ui.text("hi"),
+    ui.text("the quick brown fox jumped over the lazy dog"),
+    ui.br(),
+    header("text wrapped"),
+    ui.br(),
     ui.text_wrapped(
       "The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog. 
 
 The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog.",
     ),
-    //ui.Progress(ui.Px(20), 100, model.counter, ui.Blue),
     ui.br(),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.Black), None),
+    header("progress"),
+    ui.br(),
+    ui.progress(style.Px(50), 100, model.counter, style.Blue),
+    ui.br(),
+    header("colours"),
+    ui.br(),
+    model.counter
+      |> int.to_string
+      |> ui.text_styled(Some(style.Black), Some(style.White)),
     model.counter |> int.to_string |> ui.text_styled(Some(style.Red), None),
     model.counter |> int.to_string |> ui.text_styled(Some(style.Green), None),
     model.counter |> int.to_string |> ui.text_styled(Some(style.Yellow), None),
@@ -119,23 +154,32 @@ The quick brown fox jumped over the lazy dog. The quick brown fox jumped over th
     model.counter |> int.to_string |> ui.text_styled(Some(style.Cyan), None),
     model.counter |> int.to_string |> ui.text_styled(Some(style.White), None),
     ui.br(),
+    header("buttons"),
+    ui.br(),
     ui.row([
-      ui.button("a: Increment", key.Char("a"), Increment),
+      ui.button("i: Increment", key.Char("i"), Increment),
+      ui.button("d: Decrement", key.Char("d"), Decrement),
       ui.button_styled(
-        "b: Decrement",
-        key.Char("b"),
-        Decrement,
-        None,
-        None,
+        "r: Reset",
+        key.Char("r"),
+        Reset,
+        Some(style.Black),
+        Some(style.Magenta),
+        Some(style.Black),
+        Some(style.Green),
+      ),
+      ui.button_styled(
+        "a: Reset Async",
+        key.Char("a"),
+        SendReset,
+        Some(style.Black),
+        Some(style.Magenta),
         Some(style.Black),
         Some(style.Green),
       ),
     ]),
-    case model.counter {
-      x if x > 10 && x < 20 -> ui.button("reset", key.Char("r"), SendReset)
-      x if x > 20 -> ui.button("dd", key.Char("d"), Set(0))
-      x -> ui.text_styled("x", Some(style.Red), None)
-    },
+    ui.br(),
+    header("graph"),
     ui.br(),
     ui.graph(style.Px(60), style.Px(7), [
       1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0,
@@ -150,14 +194,18 @@ The quick brown fox jumped over the lazy dog. The quick brown fox jumped over th
       6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0,
       1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0,
     ]),
-    ui.text("hi"),
+    ui.br(),
   ])
+}
+
+fn header(string: String) -> shore.Node(msg) {
+  ui.text_styled(string, Some(style.Black), Some(style.Cyan))
 }
 
 // CMDS
 
 fn reset() -> Msg {
-  process.sleep(10_000)
+  process.sleep(1000)
   Reset
 }
 
