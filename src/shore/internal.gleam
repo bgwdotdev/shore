@@ -1269,7 +1269,7 @@ fn draw_progress(
   pos pos: Pos,
 ) -> Element {
   let progress = value * 100 / max
-  let complete = progress * width / 100 |> int.min(width)
+  let complete = { progress * width / 100 } |> int.clamp(0, width)
   let rest = width - complete
   let len = complete + rest
   [
