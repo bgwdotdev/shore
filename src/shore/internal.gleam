@@ -879,11 +879,11 @@ fn render_node(
       draw_text_multi(text, wrap, fg, bg, pos) |> Some
 
     HR ->
-      string.repeat("─", pos.width)
+      { c(Reset) <> string.repeat("─", pos.width) }
       |> Element(width: pos.width, height: 1)
       |> Some
     HR2(color) ->
-      { c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) }
+      { c(Reset) <> c(Fg(color)) <> string.repeat("─", pos.width) <> c(Reset) }
       |> Element(width: pos.width, height: 1)
       |> Some
     Bar(color) ->
