@@ -34,6 +34,7 @@ type State(model, msg) {
     tasks: process.Subject(Event(msg)),
     focused: Option(Focused(msg)),
     renderer: Subject(String),
+    last_frame: String,
   )
 }
 
@@ -97,9 +98,18 @@ fn shore_start(
       configure_renderer(renderer, tasks, #(width, height)),
     )
     let state =
-      State(spec:, model:, width:, height:, tasks:, focused: None, renderer:)
+      State(
+        spec:,
+        model:,
+        width:,
+        height:,
+        tasks:,
+        focused: None,
+        renderer:,
+        last_frame: "",
+      )
     actor.send(renderer, init_terminal())
-    let _first_paint = model |> spec.view |> render(state, _, key.Null)
+    let state = model |> spec.view |> render(state, _, key.Null)
     task_init |> task_handler(tasks)
 
     let selector =
@@ -228,7 +238,7 @@ fn shore_loop(
       let #(model, tasks) = state.spec.update(state.model, msg)
       tasks |> task_handler(state.tasks)
       let state = State(..state, model: model)
-      redraw_on_update(state, key.Null)
+      let state = redraw_on_update(state, key.Null)
       actor.continue(state)
     }
     KeyPress(input) if input == exit -> {
@@ -316,11 +326,11 @@ fn shore_loop(
         }
         None -> state
       }
-      redraw_on_update(state, input)
+      let state = redraw_on_update(state, input)
       actor.continue(state)
     }
     Redraw -> {
-      redraw(state, key.Null)
+      let state = redraw(state, key.Null)
       actor.continue(state)
     }
     Resize(width:, height:) -> {
@@ -419,14 +429,14 @@ fn do_redraw_on_timer(shore: Subject(Event(msg)), x: Int) -> Nil {
   do_redraw_on_timer(shore, x)
 }
 
-fn redraw(state: State(model, msg), input: Key) -> Nil {
+fn redraw(state: State(model, msg), input: Key) -> State(model, msg) {
   state.model |> state.spec.view |> render(state, _, input)
 }
 
-fn redraw_on_update(state: State(model, msg), input: Key) -> Nil {
+fn redraw_on_update(state: State(model, msg), input: Key) -> State(model, msg) {
   case state.spec.redraw {
     OnUpdate -> redraw(state, input)
-    OnTimer(_) -> Nil
+    OnTimer(_) -> state
   }
 }
 
@@ -727,21 +737,26 @@ type Pos {
   Pos(x: Int, y: Int, width: Int, height: Int, align: style.Align)
 }
 
-fn render(state: State(model, msg), node: Node(msg), last_input: Key) -> Nil {
+fn render(
+  state: State(model, msg),
+  node: Node(msg),
+  last_input: Key,
+) -> State(model, msg) {
   let pos = Pos(0, 0, state.width, state.height, style.Left)
-  let render = [
-    c(BSU),
-    {
-      c(Clear)
-      <> node
-      |> render_node(state, _, last_input, pos)
-      |> option.map(fn(r) { r.content })
-      |> option.unwrap("")
-    },
-    c(ESU),
-  ]
-  render |> list.each(process.send(state.renderer, _))
-  Nil
+  let frame =
+    c(Clear)
+    <> node
+    |> render_node(state, _, last_input, pos)
+    |> option.map(fn(r) { r.content })
+    |> option.unwrap("")
+  let render = [c(BSU), frame, c(ESU)]
+  case frame != state.last_frame {
+    True -> {
+      render |> list.each(process.send(state.renderer, _))
+      State(..state, last_frame: frame)
+    }
+    False -> state
+  }
 }
 
 fn render_node(
