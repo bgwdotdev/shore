@@ -478,8 +478,8 @@ fn do_list_focusable(
           let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
           do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
         }
-        Aligned(_, child) ->
-          do_list_focusable(pos, xs, do_list_focusable(pos, [child], acc))
+        Aligned(node:, ..) ->
+          do_list_focusable(pos, xs, do_list_focusable(pos, [node], acc))
         Layouts(l) -> {
           layout(l, pos)
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
