@@ -478,6 +478,8 @@ fn do_list_focusable(
           let pos = Pos(..pos, width: pos.width - 4, height: pos.height - 2)
           do_list_focusable(pos, xs, do_list_focusable(pos, children, acc))
         }
+        Aligned(_, child) ->
+          do_list_focusable(pos, xs, do_list_focusable(pos, [child], acc))
         Layouts(l) -> {
           layout(l, pos)
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
@@ -502,8 +504,7 @@ fn do_list_focusable(
         Button(text:, event:, ..) -> {
           do_list_focusable(pos, xs, [FocusedButton(text, event), ..acc])
         }
-        Aligned(..)
-        | BR
+        BR
         | Bar(..)
         | Bar2(..)
         | Debug
