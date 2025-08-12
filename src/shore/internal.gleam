@@ -529,7 +529,7 @@ fn focus_next(
     [x, ..xs] ->
       case next {
         True -> Some(x)
-        False -> focus_next(xs, focused, x == focused)
+        False -> focus_next(xs, focused, x.label == focused.label)
       }
   }
 }
