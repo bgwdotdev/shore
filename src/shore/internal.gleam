@@ -230,6 +230,9 @@ fn shore_loop(
   state: State(model, msg),
   event: Event(msg),
 ) -> actor.Next(State(model, msg), Event(msg)) {
+  // NOTE: assign here to avoid syntax highlighting error, delete whenever fixed
+  let exit = state.spec.keybinds.exit
+
   case event {
     Cmd(msg) -> {
       let #(model, tasks) = state.spec.update(state.model, msg)
@@ -238,7 +241,7 @@ fn shore_loop(
       let state = redraw_on_update(state, key.Null)
       actor.continue(state)
     }
-    KeyPress(input) if input == state.spec.keybinds.exit -> {
+    KeyPress(input) if input == exit -> {
       shore_loop(state, Exit)
     }
     KeyPress(input) -> {
