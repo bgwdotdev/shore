@@ -483,6 +483,7 @@ fn do_list_focusable(
         Layouts(l) -> {
           layout(l, pos)
           |> list.map(fn(i) { do_list_focusable(i.1, [i.0], acc) })
+          |> list.reverse
           |> list.flatten
         }
         Input(label:, value:, width:, event:, submit:, hidden: _) -> {

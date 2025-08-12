@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - ui: fix issue with focusing when using `align`
+- layout: fix issue where focusable items in a grid were walked in reverse
 
 ## [1.2.0] - 2025-07-31
 

@@ -208,7 +208,10 @@ fn view(model: Model) -> shore.Node(Msg) {
     gap: 1,
     rows: list.repeat(style.Fill, model.rows + 1),
     cols: list.repeat(style.Fill, model.cols + 1),
-    cells: [view_keybinds(model), ..list.map(model.term, view_term_output)],
+    cells: [
+      view_keybinds(model),
+      ..list.map(model.term |> list.reverse, view_term_output)
+    ],
   )
 }
 
