@@ -230,9 +230,6 @@ fn shore_loop(
   state: State(model, msg),
   event: Event(msg),
 ) -> actor.Next(State(model, msg), Event(msg)) {
-  // NOTE: assign here to avoid syntax highlighting error, delete whenever fixed
-  let exit = state.spec.keybinds.exit
-
   case event {
     Cmd(msg) -> {
       let #(model, tasks) = state.spec.update(state.model, msg)
@@ -241,25 +238,22 @@ fn shore_loop(
       let state = redraw_on_update(state, key.Null)
       actor.continue(state)
     }
-    KeyPress(input) if input == exit -> {
+    KeyPress(input) if input == state.spec.keybinds.exit -> {
       shore_loop(state, Exit)
     }
     KeyPress(input) -> {
       let ui = state.spec.view(state.model)
       let state = case state.focused {
         None -> {
-          let state = {
-            let model = case detect_event(state, ui, input) {
-              Some(msg) -> {
-                let #(model, tasks) = state.spec.update(state.model, msg)
-                tasks |> task_handler(state.tasks)
-                model
-              }
-              None -> state.model
+          let model = case detect_event(state, ui, input) {
+            Some(msg) -> {
+              let #(model, tasks) = state.spec.update(state.model, msg)
+              tasks |> task_handler(state.tasks)
+              model
             }
-            State(..state, model:)
+            None -> state.model
           }
-          state
+          State(..state, model:)
         }
         Some(focused) -> {
           let reload = list_focusable([ui], state) |> focus_current(focused)
