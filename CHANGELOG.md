@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - ui: fix issue with focusing when using `align`
+- focus: fix issue when a button is removed from the view, it can still be focused
 - layout: fix issue where focusable items in a grid were walked in reverse
 
 ## [1.2.0] - 2025-07-31

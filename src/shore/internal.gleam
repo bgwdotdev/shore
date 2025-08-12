@@ -287,8 +287,11 @@ fn shore_loop(
                     True -> {
                       let #(model, tasks) =
                         state.spec.update(state.model, focused.event)
+                      let reload =
+                        list_focusable([state.spec.view(model)], state)
+                        |> focus_current(focused)
                       tasks |> task_handler(state.tasks)
-                      State(..state, focused: Some(focused), model:)
+                      State(..state, focused: reload, model:)
                     }
                     False -> state
                   }
