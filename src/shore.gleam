@@ -111,7 +111,7 @@ pub fn keybinds(
 /// - submit: `enter`
 /// - focus_clear: `escape`
 /// - focus_next: `tab`
-/// - focus_prv: `shift+tab`
+/// - focus_prev: `shift+tab`
 pub fn default_keybinds() -> internal.Keybinds {
   internal.Keybinds(
     exit: key.Ctrl("X"),

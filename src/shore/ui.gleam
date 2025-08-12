@@ -23,7 +23,8 @@ pub fn box(children: List(Node(msg)), title: Option(String)) -> Node(msg) {
   internal.Box(children, title, None)
 }
 
-/// A box container element for holding other nodes
+/// A box container element for holding other nodes.
+///
 /// Can be provided with a custom colour for the outline and title.
 pub fn box_styled(
   children: List(Node(msg)),
@@ -78,7 +79,7 @@ pub fn button_styled(
 /// A button assigned to a key press to execute an event
 ///
 /// Takes an `id` value which uniquely identifies it, allowing two buttons to
-/// share the same display text but operate independently, contratry to a
+/// share the same display text but operate independently, contrary to a
 /// button, where the text is the id and so all button text must be unique.
 pub fn button_id(id: String, text: String, key: Key, event: msg) -> Node(msg) {
   internal.Button(
@@ -96,7 +97,7 @@ pub fn button_id(id: String, text: String, key: Key, event: msg) -> Node(msg) {
 /// A button assigned to a key press to execute an event.
 ///
 /// Takes an `id` value which uniquely identifies it, allowing two buttons to
-/// share the same display text but operate independently, contratry to a
+/// share the same display text but operate independently, contrary to a
 /// button, where the text is the id and so all button text must be unique.
 ///
 /// Can be provided with custom colours both for when focused/pressed or not.
