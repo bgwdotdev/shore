@@ -24,6 +24,7 @@ pub fn box(children: List(Node(msg)), title: Option(String)) -> Node(msg) {
 }
 
 /// A box container element for holding other nodes
+/// Can be provided with a custom colour for the outline and title.
 pub fn box_styled(
   children: List(Node(msg)),
   title: Option(String),
@@ -40,6 +41,7 @@ pub fn br() -> Node(msg) {
 /// A button assigned to a key press to execute an event
 pub fn button(text: String, key: Key, event: msg) -> Node(msg) {
   internal.Button(
+    id: text,
     text:,
     key:,
     event:,
@@ -70,7 +72,54 @@ pub fn button_styled(
   focus_fg: Option(style.Color),
   focus_bg: Option(style.Color),
 ) -> Node(msg) {
-  internal.Button(text:, key:, event:, fg:, bg:, focus_fg:, focus_bg:)
+  internal.Button(id: text, text:, key:, event:, fg:, bg:, focus_fg:, focus_bg:)
+}
+
+/// A button assigned to a key press to execute an event
+///
+/// Takes an `id` value which uniquely identifies it, allowing two buttons to
+/// share the same display text but operate independently, contratry to a
+/// button, where the text is the id and so all button text must be unique.
+pub fn button_id(id: String, text: String, key: Key, event: msg) -> Node(msg) {
+  internal.Button(
+    id:,
+    text:,
+    key:,
+    event:,
+    fg: Some(style.Black),
+    bg: Some(style.Blue),
+    focus_fg: Some(style.Black),
+    focus_bg: Some(style.Green),
+  )
+}
+
+/// A button assigned to a key press to execute an event.
+///
+/// Takes an `id` value which uniquely identifies it, allowing two buttons to
+/// share the same display text but operate independently, contratry to a
+/// button, where the text is the id and so all button text must be unique.
+///
+/// Can be provided with custom colours both for when focused/pressed or not.
+///
+/// Default colors for buttons are:
+/// ```gleam
+///  fg: Some(style.Black),
+///  bg: Some(style.Blue),
+///  focus_fg: Some(style.Black),
+///  focus_bg: Some(style.Green),
+/// ```
+///
+pub fn button_id_styled(
+  id: String,
+  text: String,
+  key: Key,
+  event: msg,
+  fg: Option(style.Color),
+  bg: Option(style.Color),
+  focus_fg: Option(style.Color),
+  focus_bg: Option(style.Color),
+) -> Node(msg) {
+  internal.Button(id:, text:, key:, event:, fg:, bg:, focus_fg:, focus_bg:)
 }
 
 /// A container element for holding other nodes over multiple lines

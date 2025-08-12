@@ -502,8 +502,8 @@ fn do_list_focusable(
           let offset = input_offset(cursor, focused.offset, focused.width)
           do_list_focusable(pos, xs, [FocusedInput(..focused, offset:), ..acc])
         }
-        Button(text:, event:, ..) -> {
-          do_list_focusable(pos, xs, [FocusedButton(text, event), ..acc])
+        Button(id:, event:, ..) -> {
+          do_list_focusable(pos, xs, [FocusedButton(id, event), ..acc])
         }
         BR
         | Bar(..)
@@ -846,15 +846,14 @@ fn render_node(
         points,
       )
       |> Some
-    Button(text:, key:, event: _, fg:, bg:, focus_fg:, focus_bg:) -> {
+    Button(id:, text:, key:, event: _, fg:, bg:, focus_fg:, focus_bg:) -> {
       let is_focused = case state.focused {
-        Some(FocusedButton(..) as focused) if focused.label == text -> True
+        Some(FocusedButton(..) as focused) if focused.label == id -> True
         _ -> False
       }
       draw_btn(Btn(
         width: pos.width,
         height: 1,
-        title: "",
         text:,
         pressed: last_input == key || is_focused,
         align: pos.align,
@@ -979,6 +978,7 @@ pub type Node(msg) {
   )
   /// A button assigned to a key press to execute an event
   Button(
+    id: String,
     text: String,
     key: Key,
     event: msg,
@@ -1216,7 +1216,6 @@ type Btn {
   Btn(
     width: Int,
     height: Int,
-    title: String,
     text: String,
     pressed: Bool,
     align: style.Align,

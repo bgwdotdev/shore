@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ui: add `box_styled` function which allows customising the border colour of a box
+- ui: add `button_id` and `button_id_styled` functions which allow providing an
+  unique internal id for the button, to support having multiple buttons with
+  the same display text
 
 ### Changed
 
