@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ui: add `box_styled` function which allows customising the border colour of a box
+
 ### Changed
 
 - render: change render logic to only send redraw calls if the previous frame

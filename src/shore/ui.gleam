@@ -20,7 +20,16 @@ pub fn bar2(color: style.Color, node: Node(msg)) -> Node(msg) {
 
 /// A box container element for holding other nodes
 pub fn box(children: List(Node(msg)), title: Option(String)) -> Node(msg) {
-  internal.Box(children, title)
+  internal.Box(children, title, None)
+}
+
+/// A box container element for holding other nodes
+pub fn box_styled(
+  children: List(Node(msg)),
+  title: Option(String),
+  fg: Option(style.Color),
+) -> Node(msg) {
+  internal.Box(children, title, fg)
 }
 
 /// An empty line

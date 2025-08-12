@@ -819,12 +819,12 @@ fn render_node(
       |> element_prefix(c(SavePos))
       |> Some
     }
-    Box(children, title) -> {
+    Box(children:, title:, fg:) -> {
       // TODO: review how box grid gaps implement
       let pos = Pos(..pos, width: pos.width - 3, height: pos.height - 2)
       let pos_child = Pos(..pos, width: pos.width - 2)
       [
-        draw_box(int.max(pos.width, 1), int.max(pos.height, 1), title),
+        draw_box(int.max(pos.width, 1), int.max(pos.height, 1), title, fg),
         ..list.map(children, render_node(state, _, last_input, pos_child))
         |> option.values
       ]
@@ -996,7 +996,7 @@ pub type Node(msg) {
   /// A container element for holding other nodes in a single line
   Row(children: List(Node(msg)))
   /// A box container element for holding other nodes
-  Box(children: List(Node(msg)), title: Option(String))
+  Box(children: List(Node(msg)), title: Option(String), fg: Option(style.Color))
   /// A table layout
   Table(width: style.Size, table: List(List(String)))
   /// A Key-Value style table layout
@@ -1246,7 +1246,12 @@ fn draw_btn(btn: Btn) -> Element {
   |> Element(width:, height: 1)
 }
 
-fn draw_box(width: Int, height: Int, title: Option(String)) -> Element {
+fn draw_box(
+  width: Int,
+  height: Int,
+  title: Option(String),
+  fg: Option(style.Color),
+) -> Element {
   let top =
     case title {
       Some(title) -> [
@@ -1275,6 +1280,7 @@ fn draw_box(width: Int, height: Int, title: Option(String)) -> Element {
     c(SavePos),
   ]
   |> string.join("")
+  |> style_text(fg, None)
   |> Element(width:, height:)
 }
 
