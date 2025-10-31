@@ -159,7 +159,15 @@ pub fn input(
   width: style.Size,
   event: fn(String) -> msg,
 ) -> Node(msg) {
-  internal.Input(label:, value:, width:, event:, submit: None, hidden: False)
+  internal.Input(
+    label:,
+    value:,
+    width:,
+    event:,
+    submit: None,
+    hidden: False,
+    focus_on: key.Null,
+  )
 }
 
 /// A field for text input with the content display hidden, useful for password fields
@@ -169,11 +177,21 @@ pub fn input_hidden(
   width: style.Size,
   event: fn(String) -> msg,
 ) -> Node(msg) {
-  internal.Input(label:, value:, width:, event:, submit: None, hidden: True)
+  internal.Input(
+    label:,
+    value:,
+    width:,
+    event:,
+    submit: None,
+    hidden: True,
+    focus_on: key.Null,
+  )
 }
 
-/// A field for text input. Allows setting a `submit` event which can be
-/// triggered by the submit keybind while the field is currently focused.
+/// A field for text input.
+///
+/// Allows setting a `submit` event which can be triggered by the submit
+/// keybind while the field is currently focused.
 ///
 /// Useful for scenarios where a separate submit button would be inconvenient,
 /// such as a chat box or 2fa prompt.
@@ -186,7 +204,69 @@ pub fn input_submit(
   submit: msg,
   hidden: Bool,
 ) -> Node(msg) {
-  internal.Input(label:, value:, width:, event:, submit: Some(submit), hidden:)
+  internal.Input(
+    label:,
+    value:,
+    width:,
+    event:,
+    submit: Some(submit),
+    hidden:,
+    focus_on: key.Null,
+  )
+}
+
+/// A field for text input.
+///
+/// Allows setting a keybind to set focus directly to the field.
+///
+/// Useful for scenarios such as jumping directly to a search bar.
+///
+pub fn input_keybind(
+  label: String,
+  value: String,
+  width: style.Size,
+  event: fn(String) -> msg,
+  keybind: Key,
+) -> Node(msg) {
+  internal.Input(
+    label:,
+    value:,
+    width:,
+    event:,
+    submit: None,
+    hidden: False,
+    focus_on: keybind,
+  )
+}
+
+/// A field for text input.
+///
+/// Allows setting a keybind to set focus directly to the field.
+///
+/// Allows setting a `submit` event which can be triggered by the submit
+/// keybind while the field is currently focused.
+///
+/// Useful for scenarios such as jumping directly to a search bar and
+/// triggering an expensive search (e.g. via an API call), upon pressing enter.
+///
+pub fn input_keybind_submit(
+  label: String,
+  value: String,
+  width: style.Size,
+  event: fn(String) -> msg,
+  submit: msg,
+  hidden: Bool,
+  keybind: Key,
+) -> Node(msg) {
+  internal.Input(
+    label:,
+    value:,
+    width:,
+    event:,
+    submit: Some(submit),
+    hidden:,
+    focus_on: keybind,
+  )
 }
 
 /// A non-visible button assigned to a key press to execute an event

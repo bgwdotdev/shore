@@ -54,6 +54,7 @@ type Focused(msg) {
     value: String,
     event: fn(String) -> msg,
     submit: Option(msg),
+    focus_on: Key,
     cursor: Int,
     offset: Int,
     width: Int,
@@ -247,7 +248,15 @@ fn shore_loop(
     KeyPress(input) -> {
       let ui = state.spec.view(state.model)
       let state = case state.focused {
+        // not focused
         None -> {
+          let focusable = list_focusable([ui], state)
+          // check application focus keybind
+          let state = case focus_keybind(focusable, input) {
+            Some(..) as focused -> State(..state, focused:)
+            _ -> state
+          }
+          // check for application button keybind
           let model = case detect_event(state, ui, input) {
             Some(msg) -> {
               let #(model, tasks) = state.spec.update(state.model, msg)
@@ -258,9 +267,12 @@ fn shore_loop(
           }
           State(..state, model:)
         }
+        // focused
         Some(focused) -> {
+          // progress focus state
           let reload = list_focusable([ui], state) |> focus_current(focused)
           case reload {
+            None -> State(..state, focused: None)
             Some(focused) -> {
               case input_handler(focused, input) {
                 FocusedInput(..) as focused -> {
@@ -301,11 +313,11 @@ fn shore_loop(
                 }
               }
             }
-            // Element has disappeared from screen for reasons
-            None -> State(..state, focused: None)
           }
         }
       }
+
+      // check global focus keybind
       let state = case control_event(input, state.spec.keybinds) {
         Some(FocusClear) -> State(..state, focused: None)
         Some(FocusPrev) -> {
@@ -486,7 +498,7 @@ fn do_list_focusable(
           |> list.reverse
           |> list.flatten
         }
-        Input(label:, value:, width:, event:, submit:, hidden: _) -> {
+        Input(label:, value:, width:, event:, submit:, hidden: _, focus_on:) -> {
           let cursor = string.length(value)
           let width = calc_size_input(width, pos.width, label)
           let focused =
@@ -495,6 +507,7 @@ fn do_list_focusable(
               value:,
               event:,
               submit:,
+              focus_on:,
               offset: 0,
               cursor:,
               width:,
@@ -563,6 +576,20 @@ fn focus_current(
           }
           |> Some
         False -> focus_current(xs, focused)
+      }
+  }
+}
+
+fn focus_keybind(
+  focusable: List(Focused(msg)),
+  input: Key,
+) -> Option(Focused(msg)) {
+  case focusable {
+    [] -> None
+    [x, ..xs] ->
+      case x {
+        FocusedInput(focus_on:, ..) if focus_on == input -> Some(x)
+        _ -> focus_keybind(xs, input)
       }
   }
 }
@@ -865,7 +892,7 @@ fn render_node(
       |> Some
     }
     KeyBind(..) -> None
-    Input(label:, value:, width:, event: _, submit: _, hidden:) -> {
+    Input(label:, value:, width:, event: _, submit: _, hidden:, focus_on: _) -> {
       let width = calc_size_input(width, pos.width, label)
       let #(is_focused, cursor) = case state.focused {
         Some(FocusedInput(..) as focused) if focused.label == label -> #(
@@ -958,6 +985,7 @@ pub type Node(msg) {
     event: fn(String) -> msg,
     submit: Option(msg),
     hidden: Bool,
+    focus_on: Key,
   )
   /// A horizontal line
   HR

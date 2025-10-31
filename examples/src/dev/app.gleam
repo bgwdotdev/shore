@@ -34,6 +34,7 @@ type Model {
     counter: Int,
     name: String,
     secret: String,
+    search: String,
     csv: List(List(String)),
     kv: List(List(String)),
   )
@@ -53,7 +54,8 @@ fn init() -> #(Model, List(fn() -> Msg)) {
     ["ip", "192.168.1.1"],
     ["uptime", "1 week"],
   ]
-  let model = Model(counter: 0, name: "world", secret: "hunter2", csv:, kv:)
+  let model =
+    Model(counter: 0, name: "world", secret: "hunter2", search: "", csv:, kv:)
   #(model, [])
 }
 
@@ -70,6 +72,8 @@ type Msg {
   Tick
   SetName(String)
   SetSecret(String)
+  SetSearch(String)
+  ClearSearch
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
@@ -84,6 +88,8 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
     Tick -> #(Model(..model, counter: model.counter + 1), [])
     SetName(name) -> #(Model(..model, name:), [])
     SetSecret(secret) -> #(Model(..model, secret:), [])
+    SetSearch(search) -> #(Model(..model, search:), [])
+    ClearSearch -> #(Model(..model, search: ""), [])
   }
 }
 
@@ -101,34 +107,56 @@ fn view(model: Model) -> shore.Node(Msg) {
     ),
     ui.hr(),
     ui.br(),
+
     header("input"),
     ui.br(),
     ui.input("name:", model.name, style.Px(50), SetName),
     ui.br(),
     ui.text("hello " <> model.name),
     ui.br(),
+
     header("input hidden"),
     ui.br(),
     ui.input_hidden("secret:", model.secret, style.Px(50), SetSecret),
     ui.br(),
     ui.text("secret " <> model.secret),
     ui.br(),
+
+    header("input keybound"),
+    ui.br(),
+    ui.input_keybind_submit(
+      "[S]earch:",
+      model.search,
+      style.Px(50),
+      SetSearch,
+      ClearSearch,
+      False,
+      key.Char("S"),
+    ),
+    ui.br(),
+    ui.text("search " <> model.search),
+    ui.br(),
+
     header("table"),
     ui.br(),
     ui.table(style.Px(50), model.csv),
     ui.br(),
+
     header("table key value"),
     ui.br(),
     ui.table_kv(style.Px(50), model.kv),
     ui.br(),
+
     header("image"),
     ui.br(),
     ui.image_unstable(pic),
     ui.br(),
+
     header("text"),
     ui.br(),
     ui.text("the quick brown fox jumped over the lazy dog"),
     ui.br(),
+
     header("text wrapped"),
     ui.br(),
     ui.text_wrapped(
@@ -137,10 +165,12 @@ fn view(model: Model) -> shore.Node(Msg) {
 The quick brown fox jumped over the lazy dog. The quick brown fox jumped over the lazy dog.",
     ),
     ui.br(),
+
     header("progress"),
     ui.br(),
     ui.progress(style.Px(50), 100, model.counter, style.Blue),
     ui.br(),
+
     header("colours"),
     ui.br(),
     model.counter
@@ -154,6 +184,7 @@ The quick brown fox jumped over the lazy dog. The quick brown fox jumped over th
     model.counter |> int.to_string |> ui.text_styled(Some(style.Cyan), None),
     model.counter |> int.to_string |> ui.text_styled(Some(style.White), None),
     ui.br(),
+
     header("buttons"),
     ui.br(),
     ui.row([
@@ -179,6 +210,7 @@ The quick brown fox jumped over the lazy dog. The quick brown fox jumped over th
       ),
     ]),
     ui.br(),
+
     header("graph"),
     ui.br(),
     ui.graph(style.Px(60), style.Px(7), [
