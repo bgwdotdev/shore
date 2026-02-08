@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- ui: add `input_keybind` and `input_keybind_submit` functions which allow defining a keybind which focuses the input field
+- style: add `MinMax` option to `Size` to provide more responsive sizing options by being able to define both a maximum and minimum size of a field
+
 ## [1.3.0] - 2025-08-13
 
 ### Added
