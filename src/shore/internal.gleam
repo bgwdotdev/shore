@@ -1041,11 +1041,23 @@ pub type Node(msg) {
   Graphic(payload: String)
 }
 
+/// finds the absolute size on a node
 fn calc_size(size: style.Size, width: Int) -> Int {
   case size {
     style.Px(px) -> px
     style.Pct(pct) -> width * pct / 100
     style.Fill -> width
+    style.MinMax(min:, max:) -> {
+      let max = calc_size(max, width)
+      let min = calc_size(min, width)
+      case max {
+        _ if max > width -> min
+        _ if min > width -> min
+        _ if max > min -> max
+        _ if min > max -> max
+        _ -> min
+      }
+    }
   }
 }
 
@@ -1514,9 +1526,8 @@ fn calc_sizes(max: Int, sizes: List(style.Size)) -> List(Int) {
   let first =
     list.map(sizes, fn(size) {
       case size {
-        style.Px(px) -> Some(px)
-        style.Pct(pct) -> Some(max * pct / 100)
         style.Fill -> None
+        size -> calc_size(size, max) |> Some
       }
     })
   let total_known_size =
