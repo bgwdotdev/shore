@@ -1,3 +1,4 @@
+import gleam/erlang/atom.{type Atom}
 import gleam/erlang/process.{type Subject}
 import gleam/float
 import gleam/int
@@ -7,6 +8,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/otp/actor.{type Started}
 import gleam/result
 import gleam/string
+import shore/internal/signal
 import shore/key.{type Key}
 import shore/style
 
@@ -143,7 +145,10 @@ fn configure_renderer(
       case default_renderer() {
         Ok(actor.Started(data: renderer, ..)) -> {
           raw_erl()
-          process.spawn(fn() { default_resize(shore, size) })
+          case os_type() {
+            Win32(_) -> process.spawn(fn() { resize_poll(shore, size) })
+            Unix(_) -> process.spawn(fn() { resize_sigwinch(shore) })
+          }
           process.spawn(fn() { read_input(shore) })
           Ok(renderer)
         }
@@ -164,19 +169,35 @@ fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
   actor.continue(state)
 }
 
-fn default_resize(shore: Subject(Event(msg)), size: #(Int, Int)) -> Nil {
+//
+// RESIZE
+//
+
+fn resize_poll(shore: Subject(Event(msg)), size: #(Int, Int)) -> Nil {
   let assert Ok(width) = terminal_columns()
   let assert Ok(height) = terminal_rows()
   let new_size = #(width, height)
   let size = case size == new_size {
     True -> size
     False -> {
-      process.send(shore, Resize(new_size.0, new_size.1))
+      actor.send(shore, Resize(new_size.0, new_size.1))
+      actor.send(shore, Redraw)
       new_size
     }
   }
   process.sleep(16)
-  default_resize(shore, size)
+  resize_poll(shore, size)
+}
+
+fn resize_sigwinch(shore: Subject(Event(msg))) -> Nil {
+  fn() {
+    let assert Ok(width) = terminal_columns()
+    let assert Ok(height) = terminal_rows()
+    let resize = Resize(width, height)
+    actor.send(shore, resize)
+    actor.send(shore, Redraw)
+  }
+  |> signal.start
 }
 
 //
@@ -1782,3 +1803,15 @@ fn terminal_rows() -> Result(Int, TODO)
 
 @external(erlang, "io", "columns")
 fn terminal_columns() -> Result(Int, TODO)
+
+//
+// OS
+//
+
+type Os {
+  Unix(name: Atom)
+  Win32(name: Atom)
+}
+
+@external(erlang, "os", "type")
+fn os_type() -> Os

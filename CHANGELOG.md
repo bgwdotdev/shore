@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- ui: add `input_keybind` and `input_keybind_submit` functions which allow defining a keybind which focuses the input field
-- style: add `MinMax` option to `Size` to provide more responsive sizing options by being able to define both a maximum and minimum size of a field
+### Added
+
+- ui: add `input_keybind` and `input_keybind_submit` functions which allow
+  defining a keybind which focuses the input field
+- style: add `MinMax` option to `Size` to provide more responsive sizing
+  options by being able to define both a maximum and minimum size of a field
+
+### Changed
+
+- render: `on_update` redraw now triggers on `sigwinch` events on unix
+  operating systems (polling logic remains on windows due to lack of similiar
+  `sigwinch` support, though has been updated to trigger redraws if the window
+  size changes between polls)
 
 ## [1.3.0] - 2025-08-13
 
@@ -30,7 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ui: fix issue with focusing when using `align`
 - focus: fix issue when a button is removed from the view, it can still be focused
-- focus: fix issue when cursor was not at end of line in an input field, progressing focus would cause it to reset focus
+- focus: fix issue when cursor was not at end of line in an input field,
+  progressing focus would cause it to reset focus
 - layout: fix issue where focusable items in a grid were walked in reverse
 
 ## [1.2.0] - 2025-07-31
