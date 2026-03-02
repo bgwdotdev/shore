@@ -12,8 +12,23 @@ pub fn start(state: fn() -> Nil) -> Nil {
 pub type State =
   fn() -> Nil
 
-pub opaque type Signal {
+/// handler for erl_signal_server must handle all events listed
+/// https://www.erlang.org/doc/apps/kernel/kernel_app.html#events
+///
+pub type Signal {
+  Sighup
+  Sigquit
+  Sigabrt
+  Sigalrm
+  Sigterm
+  Sigusr1
+  Sigusr2
+  Sigchld
+  Sigstop
+  Sigtstp
+  Sigcont
   Sigwinch
+  Siginfo
 }
 
 pub fn init(state: State) -> Result(State, Nil) {
@@ -26,6 +41,7 @@ pub fn handle_event(signal: Signal, state: State) -> Result(State, Nil) {
       state()
       Ok(state)
     }
+    _ -> Ok(state)
   }
 }
 
