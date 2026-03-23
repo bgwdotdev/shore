@@ -1,3 +1,4 @@
+import gleam/bit_array
 import gleam/erlang/atom.{type Atom}
 import gleam/erlang/process.{type Subject}
 import gleam/float
@@ -619,6 +620,8 @@ fn focus_keybind(
 // TEXT INPUT
 //
 
+// TODO: rewrite all this into a zipper: https://en.wikipedia.org/wiki/Zipper_(data_structure)
+
 fn input_handler(focused: Focused(msg), key: Key) -> Focused(msg) {
   case focused {
     FocusedInput(..) as focused -> {
@@ -647,6 +650,22 @@ fn input_handler(focused: Focused(msg), key: Key) -> Focused(msg) {
           let offset = input_offset(cursor, focused.offset, focused.width)
           FocusedInput(..focused, cursor:, offset:)
         }
+        key.CtrlLeft -> {
+          let cursor =
+            int.max(0, string_ctrl_left(focused.cursor - 1, focused.value))
+          let offset = input_offset(cursor, focused.offset, focused.width)
+          FocusedInput(..focused, cursor:, offset:)
+        }
+        key.CtrlRight -> {
+          let len = string.length(focused.value)
+          let cursor =
+            int.min(
+              len,
+              string_ctrl_right(focused.cursor + 1, focused.value, len),
+            )
+          let offset = input_offset(cursor, focused.offset, focused.width)
+          FocusedInput(..focused, cursor:, offset:)
+        }
         key.Delete -> {
           let offset = case focused.cursor == string.length(focused.value) {
             True -> focused.offset
@@ -657,6 +676,15 @@ fn input_handler(focused: Focused(msg), key: Key) -> Focused(msg) {
             value: focused.value |> string_backspace(focused.cursor, 0),
             offset:,
           )
+        }
+        key.CtrlDelete -> {
+          let value = string_ctrl_delete(focused.value, focused.cursor)
+          FocusedInput(..focused, value:)
+        }
+        key.CtrlBackspace -> {
+          let #(cursor, value) =
+            string_ctrl_backspace(focused.value, focused.cursor)
+          FocusedInput(..focused, cursor:, value:)
         }
         key.Char(char) -> {
           let cursor = focused.cursor + string.length(char)
@@ -676,9 +704,11 @@ fn input_handler(focused: Focused(msg), key: Key) -> Focused(msg) {
 }
 
 fn input_offset(cursor cursor: Int, offset offset: Int, width width: Int) -> Int {
+  // padding is due to the width of an input field having space either side, plus additional one for the cursor itself, this is probably a pretty dumb implementation ^^;
+  let padding = 3
   case cursor {
     x if x < offset -> cursor
-    x if x >= offset + { width - 3 } -> cursor - width + 3
+    x if x >= offset + { width - padding } -> cursor - width + padding
     _ -> offset
   }
 }
@@ -711,6 +741,137 @@ fn string_backspace(str: String, cursor: Int, offset: Int) -> String {
   })
   |> list.reverse
   |> string.join("")
+}
+
+fn string_ctrl_delete(str: String, cursor: Int) -> String {
+  str
+  |> bit_array.from_string
+  |> do_string_ctrl_delete(cursor, 0, <<>>, <<>>)
+  |> bit_array.to_string
+  |> result.unwrap(str)
+}
+
+fn do_string_ctrl_delete(
+  str: BitArray,
+  cursor: Int,
+  idx: Int,
+  acc: BitArray,
+  to_delete: BitArray,
+) -> BitArray {
+  case str {
+    <<char:utf8_codepoint, rest:bits>> ->
+      case idx >= cursor {
+        True ->
+          case <<char:utf8_codepoint>>, string_is_spaces(to_delete) {
+            <<" ":utf8>>, False -> <<acc:bits, " ":utf8, rest:bits>>
+            _, _ ->
+              do_string_ctrl_delete(rest, cursor, idx + 1, acc, <<
+                to_delete:bits,
+                char:utf8_codepoint,
+              >>)
+          }
+        False ->
+          do_string_ctrl_delete(
+            rest,
+            cursor,
+            idx + 1,
+            <<
+              acc:bits,
+              char:utf8_codepoint,
+            >>,
+            to_delete,
+          )
+      }
+    _ -> acc
+  }
+}
+
+fn string_ctrl_backspace(str: String, cursor: Int) -> #(Int, String) {
+  let #(cursor, new_str) =
+    str
+    |> bit_array.from_string
+    |> do_string_ctrl_backspace(cursor, 0, <<>>, <<>>, 0)
+  #(
+    cursor,
+    new_str
+      |> bit_array.to_string
+      |> result.unwrap(str),
+  )
+}
+
+fn do_string_ctrl_backspace(
+  str: BitArray,
+  cursor: Int,
+  idx: Int,
+  acc: BitArray,
+  to_delete: BitArray,
+  to_delete_idx: Int,
+) -> #(Int, BitArray) {
+  case str {
+    <<char:utf8_codepoint, rest:bits>> ->
+      case idx + 1 >= cursor {
+        True -> #(to_delete_idx, word_concat(acc, rest))
+        False ->
+          case <<char:utf8_codepoint>> {
+            <<" ":utf8>> -> {
+              let acc = word_concat(acc, to_delete)
+              do_string_ctrl_backspace(rest, cursor, idx + 1, acc, <<>>, idx)
+            }
+            _ -> {
+              let to_delete = <<
+                to_delete:bits,
+                char:utf8_codepoint,
+              >>
+              do_string_ctrl_backspace(
+                rest,
+                cursor,
+                idx + 1,
+                acc,
+                to_delete,
+                to_delete_idx,
+              )
+            }
+          }
+      }
+    _ -> #(cursor, acc)
+  }
+}
+
+fn word_concat(left: BitArray, right: BitArray) -> BitArray {
+  case left {
+    <<>> -> right
+    _ -> <<left:bits, " ":utf8, right:bits>>
+  }
+}
+
+fn string_is_spaces(str: BitArray) -> Bool {
+  case str {
+    <<" ":utf8, rest:bits>> -> string_is_spaces(rest)
+    <<>> -> True
+    _ -> False
+  }
+}
+
+fn string_ctrl_left(idx: Int, str: String) -> Int {
+  case idx < 0 {
+    True -> 0
+    False ->
+      case string.slice(str, idx, 1) {
+        " " -> idx
+        _ -> string_ctrl_left(idx - 1, str)
+      }
+  }
+}
+
+fn string_ctrl_right(idx: Int, str: String, len: Int) -> Int {
+  case idx >= len {
+    True -> idx
+    False ->
+      case string.slice(str, idx, 1) {
+        " " -> idx
+        _ -> string_ctrl_right(idx + 1, str, len)
+      }
+  }
 }
 
 //

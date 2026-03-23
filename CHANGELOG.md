@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   defining a keybind which focuses the input field
 - style: add `MinMax` option to `Size` to provide more responsive sizing
   options by being able to define both a maximum and minimum size of a field
+- input: support ctrl + (left/right/backspace/delete)
 
 ### Changed
 

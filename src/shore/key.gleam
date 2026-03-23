@@ -21,6 +21,10 @@ pub type Key {
   Char(String)
   Null
   Esc
+  CtrlLeft
+  CtrlRight
+  CtrlBackspace
+  CtrlDelete
   Ctrl(String)
   //CapsLock
   //ScrollLock
@@ -63,6 +67,10 @@ pub fn from_string(key: String) -> Key {
     "\u{001B}[21~" -> F(10)
     "\u{001B}[23~" -> F(11)
     "\u{001B}[24~" -> F(12)
+    "\u{001B}[1;5D" -> CtrlLeft
+    "\u{001B}[1;5C" -> CtrlRight
+    "\u{0008}" -> CtrlBackspace
+    "\u{001B}[3;5~" -> CtrlDelete
     "\u{0001}" -> Ctrl("A")
     "\u{0002}" -> Ctrl("B")
     // swallowed by erlang
@@ -71,7 +79,8 @@ pub fn from_string(key: String) -> Key {
     "\u{0005}" -> Ctrl("E")
     "\u{0006}" -> Ctrl("F")
     "\u{0007}" -> Ctrl("G")
-    "\u{0008}" -> Ctrl("H")
+    // CtrlBackspace
+    //"\u{0008}" -> Ctrl("H")
     // Tab
     //"\u{0009}" -> Ctrl("I")
     // Line Feed (\n)
