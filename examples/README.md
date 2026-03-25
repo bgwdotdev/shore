@@ -20,3 +20,4 @@ Here is a list of all the examples and their associated module name (formatted
 - [`mux` - Rudimentary implementation of a terminal multiplexor](./src/mux)
 - [`reader` - File reader/manager](./src/reader)
 - [`dev` - Examples of most ui items for development reference](./src/dev)
+- [`ls` - implementation of unix `ls` command to showcase `shore.static` output](./src/ls)

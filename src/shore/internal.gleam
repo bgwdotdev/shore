@@ -957,7 +957,7 @@ fn render(
   let frame =
     c(Clear)
     <> node
-    |> render_node(state, _, last_input, pos)
+    |> render_node(state.focused, _, last_input, pos)
     |> option.map(fn(r) { r.content })
     |> option.unwrap("")
   let render = [c(BSU), frame, c(ESU)]
@@ -970,8 +970,52 @@ fn render(
   }
 }
 
+pub fn render_static(
+  model: model,
+  view: fn(model) -> Node(msg),
+  width: style.Size,
+  height: style.Size,
+) -> String {
+  raw_erl()
+  c(GetPos) |> io.println
+  let #(row, col) = get_chars("", 1024) |> parse_position
+  let assert Ok(term_width) = terminal_columns()
+  let assert Ok(term_height) = terminal_rows()
+  let width = calc_size(width, term_width)
+  let height = calc_size(height, term_height)
+  let pos = Pos(col, row - height, width, height, style.Left)
+  let focused = None
+  let last_input = key.Null
+  let node = view(model)
+  let render =
+    render_node(focused, node, last_input, pos)
+    |> option.map(fn(r) { r.content })
+    |> option.unwrap("")
+  [
+    c(ScrollUp(height)),
+    c(MoveUp(height)),
+    render,
+    c(MoveDown(height)),
+  ]
+  |> string.concat
+}
+
+fn parse_position(str: String) -> #(Int, Int) {
+  let pos =
+    str
+    |> string.replace("\u{001B}[", "")
+    |> string.replace("R", "")
+    |> string.split(";")
+    |> list.map(int.parse)
+    |> result.all
+  case pos {
+    Ok([row, col]) -> #(row, col)
+    _ -> #(0, 0)
+  }
+}
+
 fn render_node(
-  state: State(model, msg),
+  focused: Option(Focused(msg)),
   node: Node(msg),
   last_input: Key,
   pos: Pos,
@@ -981,7 +1025,7 @@ fn render_node(
       layout(l, pos)
       |> list.map(fn(i) {
         let cursor = c(SetPos({ i.1 }.y, { i.1 }.x))
-        render_node(state, i.0, last_input, i.1)
+        render_node(focused, i.0, last_input, i.1)
         |> option.map(fn(r) { element_prefix(r, cursor) })
       })
       |> option.values
@@ -994,14 +1038,14 @@ fn render_node(
       Element(content:, width:, height: 1) |> Some
     }
     Aligned(align, node) ->
-      render_node(state, node, last_input, Pos(..pos, align:))
+      render_node(focused, node, last_input, Pos(..pos, align:))
     Row(children) -> {
       let len = children |> list.length
       let width = pos.width / len
       list.index_map(children, fn(child, idx) {
         let x = idx * width
         let new_pos = Pos(..pos, x:, width:, align: right_is_left(pos.align))
-        render_node(state, child, last_input, new_pos)
+        render_node(focused, child, last_input, new_pos)
         |> option.map(fn(r) {
           let move = case pos.align {
             style.Center -> c(MoveRight(x))
@@ -1022,7 +1066,7 @@ fn render_node(
       |> Some
     }
     Col(children) -> {
-      list.map(children, render_node(state, _, last_input, pos))
+      list.map(children, render_node(focused, _, last_input, pos))
       |> option.values
       |> element_join(sep(SepCol))
       |> element_prefix(c(SavePos))
@@ -1034,7 +1078,7 @@ fn render_node(
       let pos_child = Pos(..pos, width: pos.width - 2)
       [
         draw_box(int.max(pos.width, 1), int.max(pos.height, 1), title, fg),
-        ..list.map(children, render_node(state, _, last_input, pos_child))
+        ..list.map(children, render_node(focused, _, last_input, pos_child))
         |> option.values
       ]
       |> element_join(sep(SepCol))
@@ -1056,7 +1100,7 @@ fn render_node(
       )
       |> Some
     Button(id:, text:, key:, event: _, fg:, bg:, focus_fg:, focus_bg:) -> {
-      let is_focused = case state.focused {
+      let is_focused = case focused {
         Some(FocusedButton(..) as focused) if focused.label == id -> True
         _ -> False
       }
@@ -1076,14 +1120,14 @@ fn render_node(
     KeyBind(..) -> None
     Input(label:, value:, width:, event: _, submit: _, hidden:, focus_on: _) -> {
       let width = calc_size_input(width, pos.width, label)
-      let #(is_focused, cursor) = case state.focused {
+      let #(is_focused, cursor) = case focused {
         Some(FocusedInput(..) as focused) if focused.label == label -> #(
           True,
           focused.cursor,
         )
         _ -> #(False, string.length(value))
       }
-      let offset = case state.focused {
+      let offset = case focused {
         Some(FocusedInput(..) as focused) if focused.label == label ->
           focused.offset
         _ -> input_offset(string.length(value), 0, width)
@@ -1134,7 +1178,7 @@ fn render_node(
           c(LoadPos),
         ]
         |> string.join("")
-      render_node(state, node, last_input, pos)
+      render_node(focused, node, last_input, pos)
       |> option.map(element_prefix(_, bar))
     }
     BR -> "\n" |> Element(width: pos.width, height: 1) |> Some
@@ -1759,6 +1803,8 @@ type TermCode {
   SetPos(x: Int, y: Int)
   SavePos
   LoadPos
+  ScrollUp(Int)
+  ScrollDown(Int)
   MoveUp(Int)
   MoveDown(Int)
   MoveLeft(Int)
@@ -1789,6 +1835,8 @@ fn c(code: TermCode) -> String {
       esc <> "[" <> int.to_string(x) <> ";" <> int.to_string(y) <> "H"
     SavePos -> esc <> "[s"
     LoadPos -> esc <> "[u"
+    ScrollUp(i) -> esc <> "[" <> int.to_string(i) <> "S"
+    ScrollDown(i) -> esc <> "[" <> int.to_string(i) <> "T"
     MoveUp(i) -> { esc <> "[" <> int.to_string(i) <> "A" } |> ignore_zero(i)
     MoveDown(i) -> { esc <> "[" <> int.to_string(i) <> "B" } |> ignore_zero(i)
     MoveLeft(i) -> { esc <> "[" <> int.to_string(i) <> "D" } |> ignore_zero(i)

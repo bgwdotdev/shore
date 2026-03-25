@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - style: add `MinMax` option to `Size` to provide more responsive sizing
   options by being able to define both a maximum and minimum size of a field
 - input: support ctrl + (left/right/backspace/delete)
+- shore: add `static` function to do a one-off render of a view as a string for non-interactive usage
+- example: add `ls` example to showcase `static` being used to implement a basic `ls -l` unix command
 
 ### Changed
 

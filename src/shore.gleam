@@ -2,6 +2,7 @@ import gleam/erlang/process.{type Subject}
 import gleam/otp/actor
 import shore/internal
 import shore/key.{type Key}
+import shore/style
 
 /// Send events to shore with the `send` function
 pub type Event(msg) =
@@ -90,6 +91,30 @@ pub fn start(
   spec: internal.Spec(model, msg),
 ) -> Result(Subject(Event(msg)), actor.StartError) {
   internal.start(spec)
+}
+
+/// A static render of the `view`, can be used to provide non-interactive
+/// terminal output, for example if you want to print a table without invoking
+/// the entire shore runtime.
+///
+/// See `ls` in examples for further reference
+///
+/// ## Example
+/// ```
+/// pub fn main() {
+///   let model = init().0
+///   let static = shore.static(model, view, style.Fill, style.Px(10))
+///   static |> io.println
+/// }
+/// ```
+///
+pub fn static(
+  model model: model,
+  view view: fn(model) -> Node(msg),
+  width width: style.Size,
+  height height: style.Size,
+) -> String {
+  internal.render_static(model, view, width, height)
 }
 
 /// Set keybinds for various shore level functions, such as moving between
