@@ -1,10 +1,7 @@
-import gleam/bit_array
 import gleam/erlang/process
 import gleam/int
-import gleam/io
 import gleam/option.{None, Some}
 import gleam/pair
-import gleam/string
 import shore
 import shore/key
 import shore/style

@@ -119,7 +119,6 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
       Model(..model, content: "error: " <> simplifile.describe_error(e)),
       [],
     )
-    ReadFile(Error(_)) -> #(model, [])
 
     Up -> {
       let model = Model(..model, focused: int.max(model.focused - 1, 0))
