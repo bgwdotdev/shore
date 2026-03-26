@@ -983,7 +983,12 @@ pub fn render_static(
   let assert Ok(term_height) = terminal_rows()
   let width = calc_size(width, term_width)
   let height = calc_size(height, term_height)
-  let pos = Pos(col, row - height, width, height, style.Left)
+  // adjusts the window depending if content would overflow the terminal
+  let #(scroll_up, row) = case { row + height } > term_height {
+    True -> #(c(ScrollUp(height)), row - height)
+    False -> #("", row)
+  }
+  let pos = Pos(col, row, width, height, style.Left)
   let focused = None
   let last_input = key.Null
   let node = view(model)
@@ -992,10 +997,8 @@ pub fn render_static(
     |> option.map(fn(r) { r.content })
     |> option.unwrap("")
   [
-    c(ScrollUp(height)),
-    c(MoveUp(height)),
+    scroll_up,
     render,
-    c(MoveDown(height)),
   ]
   |> string.concat
 }
