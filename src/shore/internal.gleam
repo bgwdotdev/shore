@@ -1189,7 +1189,13 @@ fn render_node(
       let width = calc_size(width, pos.width)
       draw_progress(width:, max:, value:, color:, pos:) |> Some
     }
-    Graphic(payload:) -> draw_graphic(payload) |> Some
+    Graphic(payload:, width:, height:) ->
+      draw_graphic(
+        payload,
+        calc_size(width, pos.width),
+        calc_size(height, pos.height),
+      )
+      |> Some
   }
 }
 
@@ -1267,7 +1273,7 @@ pub type Node(msg) {
   /// Wraps a `Layout`
   Layouts(layout: Layout(msg))
   /// A base64 image using kitty graphics protocol
-  Graphic(payload: String)
+  Graphic(payload: String, width: style.Size, height: style.Size)
 }
 
 /// finds the absolute size on a node
@@ -1690,8 +1696,9 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
   }
 }
 
-fn draw_graphic(payload: String) -> Element {
-  Element(width: 10, height: 10, content: c(Graphics(PNG, False, payload)))
+fn draw_graphic(payload: String, width: Int, height: Int) -> Element {
+  let content = Graphics(PNG, False, payload, width, height) |> c
+  Element(width:, height:, content:)
 }
 
 //
@@ -1825,7 +1832,13 @@ type TermCode {
   BSU
   /// End Synchronized Output
   ESU
-  Graphics(format: KittyFormat, compress: Bool, payload: String)
+  Graphics(
+    format: KittyFormat,
+    compress: Bool,
+    payload: String,
+    width: Int,
+    height: Int,
+  )
 }
 
 fn c(code: TermCode) -> String {
@@ -1855,8 +1868,10 @@ fn c(code: TermCode) -> String {
     MainBuffer -> esc <> "[?1049l"
     BSU -> esc <> "[?2026h"
     ESU -> esc <> "[?2026l"
-    Graphics(format:, compress:, payload:) ->
-      payload |> kitty_payload([]) |> kitty_code(format, compress, _, "")
+    Graphics(format:, compress:, payload:, width:, height:) ->
+      payload
+      |> kitty_payload([])
+      |> kitty_code(format, compress, _, width, height, "")
   }
 }
 
@@ -1929,6 +1944,8 @@ fn kitty_code(
   format: KittyFormat,
   compress: Bool,
   payload: List(String),
+  width: Int,
+  height: Int,
   acc: String,
 ) -> String {
   let wrap = fn(m, payload) {
@@ -1939,6 +1956,10 @@ fn kitty_code(
     <> kitty_format(format)
     <> ","
     <> m
+    <> ",r="
+    <> int.to_string(height)
+    <> ",c="
+    <> int.to_string(width)
     <> ";"
     <> payload
     <> esc
@@ -1946,8 +1967,10 @@ fn kitty_code(
   }
   case payload {
     [] -> acc
-    [x] -> kitty_code(format, compress, [], acc <> wrap("m=0", x))
-    [x, ..xs] -> kitty_code(format, compress, xs, acc <> wrap("m=1", x))
+    [x] ->
+      kitty_code(format, compress, [], width, height, acc <> wrap("m=0", x))
+    [x, ..xs] ->
+      kitty_code(format, compress, xs, width, height, acc <> wrap("m=1", x))
   }
 }
 

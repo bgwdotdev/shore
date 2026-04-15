@@ -331,13 +331,15 @@ pub fn text_wrapped_styled(
 ///
 /// This is currently a unstable implementation/exploration of using the kitty graphics protocol, some general notes are:
 /// - visually large pngs and file sizes over 500kb~ have performance issues
-/// - performance is typically even worse in render on_timer mode as it will redraw the images every frame
-/// - size of image is not detected for purposes of layout, as such, it should probably be in its own grid cell
 /// - only pngs stored as a base64 string are supported
 /// - only some terminals support this protocol
 /// - this function is likely to change significantly as the implementation of image support is refined
 /// - expect bugs
 ///
-pub fn image_unstable(base64: String) -> Node(msg) {
-  internal.Graphic(base64)
+pub fn image_unstable(
+  base64: String,
+  width: style.Size,
+  height: style.Size,
+) -> Node(msg) {
+  internal.Graphic(base64, width, height)
 }
