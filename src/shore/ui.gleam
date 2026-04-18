@@ -341,5 +341,5 @@ pub fn image_unstable(
   width: style.Size,
   height: style.Size,
 ) -> Node(msg) {
-  internal.Graphic(base64, width, height)
+  internal.KittyGraphic(base64, width, height)
 }

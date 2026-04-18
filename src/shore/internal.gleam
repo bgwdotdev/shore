@@ -412,7 +412,7 @@ fn detect_event(
     | TableKV(..)
     | Graph(..)
     | TextMulti(..)
-    | Graphic(..)
+    | KittyGraphic(..)
     | Debug -> None
   }
 }
@@ -551,7 +551,7 @@ fn do_list_focusable(
         | Table(..)
         | TableKV(..)
         | Graph(..)
-        | Graphic(..)
+        | KittyGraphic(..)
         | TextMulti(..) -> do_list_focusable(pos, xs, acc)
       }
   }
@@ -1189,8 +1189,8 @@ fn render_node(
       let width = calc_size(width, pos.width)
       draw_progress(width:, max:, value:, color:, pos:) |> Some
     }
-    Graphic(payload:, width:, height:) ->
-      draw_graphic(
+    KittyGraphic(payload:, width:, height:) ->
+      draw_kitty_graphic(
         payload,
         calc_size(width, pos.width),
         calc_size(height, pos.height),
@@ -1273,7 +1273,7 @@ pub type Node(msg) {
   /// Wraps a `Layout`
   Layouts(layout: Layout(msg))
   /// A base64 image using kitty graphics protocol
-  Graphic(payload: String, width: style.Size, height: style.Size)
+  KittyGraphic(payload: String, width: style.Size, height: style.Size)
 }
 
 /// finds the absolute size on a node
@@ -1696,8 +1696,8 @@ fn draw_graph(width: Int, height: Int, values: List(Float)) -> Element {
   }
 }
 
-fn draw_graphic(payload: String, width: Int, height: Int) -> Element {
-  let content = Graphics(PNG, False, payload, width, height) |> c
+fn draw_kitty_graphic(payload: String, width: Int, height: Int) -> Element {
+  let content = KittyGraphics(PNG, False, payload, width, height) |> c
   Element(width:, height:, content:)
 }
 
@@ -1832,7 +1832,7 @@ type TermCode {
   BSU
   /// End Synchronized Output
   ESU
-  Graphics(
+  KittyGraphics(
     format: KittyFormat,
     compress: Bool,
     payload: String,
@@ -1868,7 +1868,7 @@ fn c(code: TermCode) -> String {
     MainBuffer -> esc <> "[?1049l"
     BSU -> esc <> "[?2026h"
     ESU -> esc <> "[?2026l"
-    Graphics(format:, compress:, payload:, width:, height:) ->
+    KittyGraphics(format:, compress:, payload:, width:, height:) ->
       payload
       |> kitty_payload([])
       |> kitty_code(format, compress, _, width, height, "")
