@@ -300,31 +300,105 @@ pub fn table_kv(width: style.Size, table: List(List(String))) -> Node(msg) {
 }
 
 /// A text string
+@deprecated("use paragaph instead")
 pub fn text(text: String) -> Node(msg) {
-  internal.TextMulti(text, internal.NoWrap, None, None)
+  internal.TextMulti(text, internal.NoWrap, None, None, [])
+}
+
+pub fn paragraph(text: String) -> Node(msg) {
+  internal.TextMulti(text, internal.NoWrap, None, None, [])
 }
 
 /// A text string with automatic line wrapping
+@deprecated("use text_new builder instead")
 pub fn text_wrapped(text: String) -> Node(msg) {
-  internal.TextMulti(text, internal.Wrap, None, None)
+  internal.TextMulti(text, internal.Wrap, None, None, [])
 }
 
 /// A text string with colored foreground and/or background
+@deprecated("use text_new builder instead")
 pub fn text_styled(
   text: String,
   fg: Option(style.Color),
   bg: Option(style.Color),
 ) -> Node(msg) {
-  internal.TextMulti(text, internal.NoWrap, fg, bg)
+  internal.TextMulti(text, internal.NoWrap, fg, bg, [])
 }
 
 /// A text string with automatic line wrapping and colored foreground and/or background
+@deprecated("use text_new builder instead")
 pub fn text_wrapped_styled(
   text: String,
   fg: Option(style.Color),
   bg: Option(style.Color),
 ) -> Node(msg) {
-  internal.TextMulti(text, internal.Wrap, fg, bg)
+  internal.TextMulti(text, internal.Wrap, fg, bg, [])
+}
+
+/// Buildable text element, see `text_new` for usage
+pub opaque type Text {
+  Text(
+    content: String,
+    foreground: Option(style.Color),
+    background: Option(style.Color),
+    graphics: List(style.Graphic),
+    wrap: internal.TextWrap,
+  )
+}
+
+/// A text builder to create text elements with various styles applied
+///
+///
+/// ```gleam
+/// "my paragaph of text"
+/// |> ui.text_new
+/// |> ui.text_foreground(style.Black)
+/// |> ui.text_background(style.Cyan)
+/// |> ui.text_graphic(style.Bold)
+/// |> ui.text_graphic(style.Italic)
+/// |> ui.text_to_paragraph
+/// ```
+///
+pub fn text_new(content: String) -> Text {
+  Text(
+    content: content,
+    foreground: None,
+    background: None,
+    graphics: [],
+    wrap: internal.NoWrap,
+  )
+}
+
+/// sets the text foreground color
+pub fn text_foreground(text: Text, color: style.Color) -> Text {
+  Text(..text, foreground: Some(color))
+}
+
+/// sets the text background color
+pub fn text_background(text: Text, color: style.Color) -> Text {
+  Text(..text, background: Some(color))
+}
+
+/// applies SGR style to text, such as bold, underline, etc (see style.Graphic for compelete list)
+/// can be called multiple times
+pub fn text_graphic(text: Text, graphic: style.Graphic) -> Text {
+  Text(..text, graphics: [graphic, ..text.graphics])
+}
+
+/// sets the text to automatically line wrap
+pub fn text_wrap(text: Text) -> Text {
+  Text(..text, wrap: internal.Wrap)
+}
+
+/// builds the text item into a shore ui node
+pub fn text_to_paragraph(text: Text) -> Node(msg) {
+  internal.TextMulti(
+    text.content,
+    text.wrap,
+    text.foreground,
+    text.background,
+    text.graphics,
+  )
 }
 
 /// UNSTABLE: A base64 encoded png image drawn using the Kitty Graphics Protocol

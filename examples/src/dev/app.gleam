@@ -132,6 +132,7 @@ fn view(model: Model) -> shore.Node(Msg) {
     ),
     ui.br(),
     ui.text("search " <> model.search),
+    ui.paragraph("search " <> model.search),
     ui.br(),
 
     header("table"),
@@ -228,7 +229,13 @@ The quick brown fox jumped over the lazy dog. The quick brown fox jumped over th
 }
 
 fn header(string: String) -> shore.Node(msg) {
-  ui.text_styled(string, Some(style.Black), Some(style.Cyan))
+  string
+  |> ui.text_new
+  |> ui.text_foreground(style.Black)
+  |> ui.text_background(style.Cyan)
+  |> ui.text_graphic(style.Bold)
+  |> ui.text_graphic(style.Italic)
+  |> ui.text_to_paragraph
 }
 
 // CMDS

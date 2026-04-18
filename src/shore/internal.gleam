@@ -1147,8 +1147,8 @@ fn render_node(
       ))
       |> Some
     }
-    TextMulti(text:, wrap:, fg:, bg:) ->
-      draw_text_multi(text, wrap, fg, bg, pos) |> Some
+    TextMulti(text:, wrap:, fg:, bg:, graphics:) ->
+      draw_text_multi(text, wrap, fg, bg, graphics, pos) |> Some
 
     HR ->
       { c(Reset) <> string.repeat("─", pos.width) }
@@ -1238,6 +1238,7 @@ pub type Node(msg) {
     wrap: TextWrap,
     fg: Option(style.Color),
     bg: Option(style.Color),
+    graphics: List(style.Graphic),
   )
   /// A button assigned to a key press to execute an event
   Button(
@@ -1347,12 +1348,12 @@ fn style_text(
   text: String,
   fg: Option(style.Color),
   bg: Option(style.Color),
+  graphics: List(style.Graphic),
 ) -> String {
-  c(Reset)
-  <> { option.map(fg, fn(o) { c(Fg(o)) }) |> option.unwrap("") }
-  <> { option.map(bg, fn(o) { c(Bg(o)) }) |> option.unwrap("") }
-  <> text
-  <> c(Reset)
+  let foreground = fg |> option.map(Fg) |> option.map(c) |> option.unwrap("")
+  let background = bg |> option.map(Bg) |> option.map(c) |> option.unwrap("")
+  let graphics = graphics |> list.map(SGR) |> list.map(c) |> string.join("")
+  c(Reset) <> foreground <> background <> graphics <> text <> c(Reset)
 }
 
 pub type TextWrap {
@@ -1365,6 +1366,7 @@ fn draw_text_multi(
   wrap: TextWrap,
   fg: Option(style.Color),
   bg: Option(style.Color),
+  graphics: List(style.Graphic),
   pos: Pos,
 ) -> Element {
   let width = pos.width - 2
@@ -1382,7 +1384,7 @@ fn draw_text_multi(
     <> c(LoadPos)
     <> c(MoveDown(1))
   text
-  |> style_text(fg, bg)
+  |> style_text(fg, bg, graphics)
   |> Element(width:, height:)
 }
 
@@ -1516,7 +1518,7 @@ fn draw_btn(btn: Btn) -> Element {
     True -> btn.focus_fg
   }
   button
-  |> style_text(fg, bg)
+  |> style_text(fg, bg, [])
   |> Element(width:, height: 1)
 }
 
@@ -1554,7 +1556,7 @@ fn draw_box(
     c(SavePos),
   ]
   |> string.join("")
-  |> style_text(fg, None)
+  |> style_text(fg, None, [])
   |> Element(width:, height:)
 }
 
@@ -1602,7 +1604,7 @@ fn draw_table(width: Int, values: List(List(String)), pos: Pos) -> Element {
     |> fn(row) {
       case idx {
         0 ->
-          c(SGR(Bold))
+          c(SGR(style.Bold))
           <> c(Fg(style.Blue))
           <> row
           <> c(Reset)
@@ -1637,7 +1639,7 @@ fn draw_table_kv(width: Int, values: List(List(String)), pos: Pos) -> Element {
         x -> col <> c(MoveRight(col_width - x))
       }
       case idx {
-        0 -> c(SGR(Bold)) <> c(Fg(style.Blue)) <> trim <> c(Reset)
+        0 -> c(SGR(style.Bold)) <> c(Fg(style.Blue)) <> trim <> c(Reset)
         _ -> trim
       }
     })
@@ -1823,7 +1825,7 @@ type TermCode {
   Column(Int)
   Fg(style.Color)
   Bg(style.Color)
-  SGR(Graphic)
+  SGR(style.Graphic)
   Reset
   GetPos
   AltBuffer
@@ -1859,8 +1861,8 @@ fn c(code: TermCode) -> String {
     MoveRight(i) -> { esc <> "[" <> int.to_string(i) <> "C" } |> ignore_zero(i)
     StartLine -> Column(1) |> c
     Column(i) -> esc <> "[" <> int.to_string(i) <> "G"
-    Fg(color) -> esc <> "[3" <> col(color) <> "m"
-    Bg(color) -> esc <> "[4" <> col(color) <> "m"
+    Fg(color) -> esc <> "[3" <> color_to_string(color) <> "m"
+    Bg(color) -> esc <> "[4" <> color_to_string(color) <> "m"
     SGR(graphic) -> esc <> "[" <> graphic_to_string(graphic) <> "m"
     Reset -> esc <> "[0m"
     GetPos -> esc <> "[6n"
@@ -1978,21 +1980,15 @@ fn kitty_code(
 // GRAPHIC
 //
 
-// TODO: move to style, this should be made public, styling UI elements
-// probably needs reworked first.
-type Graphic {
-  Bold
-  Faint
-  Italic
-  Underline
-}
-
-fn graphic_to_string(graphic: Graphic) -> String {
+fn graphic_to_string(graphic: style.Graphic) -> String {
   case graphic {
-    Bold -> "1"
-    Faint -> "2"
-    Italic -> "3"
-    Underline -> "4"
+    style.Bold -> "1"
+    style.Faint -> "2"
+    style.Italic -> "3"
+    style.Underline -> "4"
+    style.Inverse -> "7"
+    style.Conceal -> "8"
+    style.Strikethrough -> "9"
   }
 }
 
@@ -2000,7 +1996,7 @@ fn graphic_to_string(graphic: Graphic) -> String {
 // COLOR
 //
 
-fn col(color: style.Color) -> String {
+fn color_to_string(color: style.Color) -> String {
   case color {
     style.Black -> "0"
     style.Red -> "1"

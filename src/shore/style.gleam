@@ -50,3 +50,13 @@ pub type Color {
   Cyan
   White
 }
+
+pub type Graphic {
+  Bold
+  Faint
+  Italic
+  Underline
+  Inverse
+  Conceal
+  Strikethrough
+}

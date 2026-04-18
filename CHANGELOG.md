@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - input: support ctrl + (left/right/backspace/delete)
 - shore: add `static` function to do a one-off render of a view as a string for non-interactive usage
 - example: add `ls` example to showcase `static` being used to implement a basic `ls -l` unix command
+- ui: add `paragraph` function to replace `text`
+- ui: add text builder functions (see `text_new`)
+- style: add `graphic` supporting bold, faint, italic, underline, inverse, conceal and strikethrough SGR (Select Graphic Rendition)
 
 ### Changed
 
@@ -23,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   operating systems (polling logic remains on windows due to lack of similiar
   `sigwinch` support, though has been updated to trigger redraws if the window
   size changes between polls)
+- ui: image\_unstable now takes width and height `style.Size` values
+
+### Depcrecated
+
+- ui: `text`, `text_styled`, `text_wrapped`, `text_wrapped_styled`
 
 ## [1.3.0] - 2025-08-13
 
