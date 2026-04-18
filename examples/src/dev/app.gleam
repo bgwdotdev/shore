@@ -1,5 +1,6 @@
 import gleam/erlang/process
 import gleam/int
+import gleam/list
 import gleam/option.{None, Some}
 import gleam/pair
 import shore
@@ -171,16 +172,32 @@ The quick brown fox jumped over the lazy dog. The quick brown fox jumped over th
 
     header("colours"),
     ui.br(),
-    model.counter
-      |> int.to_string
-      |> ui.text_styled(Some(style.Black), Some(style.White)),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.Red), None),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.Green), None),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.Yellow), None),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.Blue), None),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.Magenta), None),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.Cyan), None),
-    model.counter |> int.to_string |> ui.text_styled(Some(style.White), None),
+    [
+      style.Black,
+      style.Red,
+      style.Green,
+      style.Yellow,
+      style.Blue,
+      style.Magenta,
+      style.Cyan,
+      style.White,
+      style.BrightBlack,
+      style.BrightRed,
+      style.BrightGreen,
+      style.BrightYellow,
+      style.BrightBlue,
+      style.BrightMagenta,
+      style.BrightCyan,
+      style.BrightWhite,
+    ]
+      |> list.map(fn(color) {
+        model.counter
+        |> int.to_string
+        |> ui.text_new
+        |> ui.text_foreground(color)
+        |> ui.text_to_paragraph
+      })
+      |> ui.col,
     ui.br(),
 
     header("buttons"),

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ui: add `paragraph` function to replace `text`
 - ui: add text builder functions (see `text_new`)
 - style: add `graphic` supporting bold, faint, italic, underline, inverse, conceal and strikethrough SGR (Select Graphic Rendition)
+- style: add 'bright' terminal colors
 
 ### Changed
 

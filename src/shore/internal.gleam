@@ -1861,8 +1861,8 @@ fn c(code: TermCode) -> String {
     MoveRight(i) -> { esc <> "[" <> int.to_string(i) <> "C" } |> ignore_zero(i)
     StartLine -> Column(1) |> c
     Column(i) -> esc <> "[" <> int.to_string(i) <> "G"
-    Fg(color) -> esc <> "[3" <> color_to_string(color) <> "m"
-    Bg(color) -> esc <> "[4" <> color_to_string(color) <> "m"
+    Fg(color) -> esc <> "[" <> color_to_code(ColorForeground, color) <> "m"
+    Bg(color) -> esc <> "[" <> color_to_code(ColorBackground, color) <> "m"
     SGR(graphic) -> esc <> "[" <> graphic_to_string(graphic) <> "m"
     Reset -> esc <> "[0m"
     GetPos -> esc <> "[6n"
@@ -1996,17 +1996,35 @@ fn graphic_to_string(graphic: style.Graphic) -> String {
 // COLOR
 //
 
-fn color_to_string(color: style.Color) -> String {
-  case color {
-    style.Black -> "0"
-    style.Red -> "1"
-    style.Green -> "2"
-    style.Yellow -> "3"
-    style.Blue -> "4"
-    style.Magenta -> "5"
-    style.Cyan -> "6"
-    style.White -> "7"
+type ColorLayer {
+  ColorForeground
+  ColorBackground
+}
+
+fn color_to_code(layer: ColorLayer, color: style.Color) -> String {
+  let layer = case layer {
+    ColorForeground -> 30
+    ColorBackground -> 40
   }
+  let color = case color {
+    style.Black -> 0
+    style.Red -> 1
+    style.Green -> 2
+    style.Yellow -> 3
+    style.Blue -> 4
+    style.Magenta -> 5
+    style.Cyan -> 6
+    style.White -> 7
+    style.BrightBlack -> 60
+    style.BrightRed -> 61
+    style.BrightGreen -> 62
+    style.BrightYellow -> 63
+    style.BrightBlue -> 64
+    style.BrightMagenta -> 65
+    style.BrightCyan -> 66
+    style.BrightWhite -> 67
+  }
+  layer + color |> int.to_string
 }
 
 //

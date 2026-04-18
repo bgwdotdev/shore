@@ -49,6 +49,14 @@ pub type Color {
   Magenta
   Cyan
   White
+  BrightBlack
+  BrightRed
+  BrightGreen
+  BrightYellow
+  BrightBlue
+  BrightMagenta
+  BrightCyan
+  BrightWhite
 }
 
 pub type Graphic {
