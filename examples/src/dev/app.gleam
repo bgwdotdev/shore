@@ -146,7 +146,7 @@ fn view(model: Model) -> shore.Node(Msg) {
 
     header("image"),
     ui.br(),
-    ui.image_unstable(pic),
+    ui.image_unstable(pic, style.Px(2), style.Px(1)),
     ui.br(),
 
     header("text"),
