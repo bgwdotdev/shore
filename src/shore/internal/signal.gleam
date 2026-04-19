@@ -3,6 +3,7 @@ import gleam/erlang/process
 
 const module = "shore@internal@signal"
 
+@target(erlang)
 pub fn start(state: fn() -> Nil) -> Nil {
   set_signal(Sigwinch, Handle)
   add_handler(atom.create("erl_signal_server"), atom.create(module), state)

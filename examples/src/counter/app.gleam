@@ -1,7 +1,9 @@
+@target(erlang)
 import gleam/erlang/process
 import gleam/int
 import gleam/option.{Some}
 import shore
+import shore/effect.{type Effect}
 import shore/key
 import shore/layout
 import shore/style
@@ -9,8 +11,10 @@ import shore/ui
 
 // MAIN
 
+@target(erlang)
 pub fn main() {
-  let exit = process.new_subject()
+  let exit_subject = process.new_subject()
+  let exit = fn(nil) { process.send(exit_subject, nil) }
   let assert Ok(_actor) =
     shore.spec(
       init:,
@@ -21,7 +25,23 @@ pub fn main() {
       redraw: shore.on_timer(16),
     )
     |> shore.start
-  exit |> process.receive_forever
+  exit_subject |> process.receive_forever
+}
+
+@target(javascript)
+pub fn main() {
+  let exit = fn(_) { Nil }
+  let assert Ok(_actor) =
+    shore.spec(
+      init:,
+      update:,
+      view:,
+      exit:,
+      keybinds: shore.default_keybinds(),
+      redraw: shore.on_update(),
+    )
+    |> shore.start
+  Nil
 }
 
 // MODEL
@@ -30,10 +50,10 @@ type Model {
   Model(counter: Int)
 }
 
-fn init() -> #(Model, List(fn() -> Msg)) {
+fn init() -> #(Model, Effect(Msg)) {
   let model = Model(counter: 0)
-  let cmds = []
-  #(model, cmds)
+  let effect = effect.none()
+  #(model, effect)
 }
 
 // UPDATE
@@ -43,10 +63,10 @@ type Msg {
   Decrement
 }
 
-fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
+fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
-    Increment -> #(Model(counter: model.counter + 1), [])
-    Decrement -> #(Model(counter: model.counter - 1), [])
+    Increment -> #(Model(counter: model.counter + 1), effect.none())
+    Decrement -> #(Model(counter: model.counter - 1), effect.none())
   }
 }
 
@@ -55,7 +75,7 @@ fn update(model: Model, msg: Msg) -> #(Model, List(fn() -> Msg)) {
 fn view(model: Model) -> shore.Node(Msg) {
   ui.box(
     [
-      ui.text(
+      ui.paragraph(
         "keybinds
 
 i: increments
@@ -63,7 +83,7 @@ d: decrements
 ctrl+x: exits
       ",
       ),
-      ui.text(int.to_string(model.counter)),
+      ui.paragraph(int.to_string(model.counter)),
       ui.br(),
       ui.row([
         ui.button("increment", key.Char("i"), Increment),

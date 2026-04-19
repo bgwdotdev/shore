@@ -1,5 +1,6 @@
 import gleam/erlang/process.{type Subject}
 import gleam/otp/actor
+import shore/effect.{type Effect}
 import shore/internal
 import shore/key.{type Key}
 import shore/style
@@ -15,6 +16,9 @@ pub type Node(msg) =
 /// A container item in a Grid
 pub type Cell(msg) =
   internal.Cell(msg)
+
+pub type StartError =
+  internal.StartError
 
 /// A shore application is made up of these base parts. Following The Elm
 /// Architecture, you must define an init, view and update function which shore
@@ -54,10 +58,10 @@ pub type Cell(msg) =
 /// ```
 ///
 pub fn spec(
-  init init: fn() -> #(model, List(fn() -> msg)),
+  init init: fn() -> #(model, Effect(msg)),
   view view: fn(model) -> internal.Node(msg),
-  update update: fn(model, msg) -> #(model, List(fn() -> msg)),
-  exit exit: Subject(Nil),
+  update update: fn(model, msg) -> #(model, Effect(msg)),
+  exit exit: fn(Nil) -> Nil,
   keybinds keybinds: internal.Keybinds,
   redraw redraw: internal.Redraw,
 ) -> internal.Spec(model, msg) {
@@ -76,10 +80,10 @@ pub fn spec(
 /// subject via `actor.send`
 ///
 pub fn spec_with_subject(
-  init init: fn(Subject(msg)) -> #(model, List(fn() -> msg)),
+  init init: fn(fn(msg) -> Nil) -> #(model, Effect(msg)),
   view view: fn(model) -> internal.Node(msg),
-  update update: fn(model, msg) -> #(model, List(fn() -> msg)),
-  exit exit: Subject(Nil),
+  update update: fn(model, msg) -> #(model, Effect(msg)),
+  exit exit: fn(Nil) -> Nil,
   keybinds keybinds: internal.Keybinds,
   redraw redraw: internal.Redraw,
 ) -> internal.Spec(model, msg) {
@@ -89,7 +93,7 @@ pub fn spec_with_subject(
 /// Starts the application actor and returns its subject
 pub fn start(
   spec: internal.Spec(model, msg),
-) -> Result(Subject(Event(msg)), actor.StartError) {
+) -> Result(fn(Event(msg)) -> Nil, StartError) {
   internal.start(spec)
 }
 
