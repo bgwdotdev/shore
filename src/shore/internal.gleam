@@ -1390,7 +1390,7 @@ fn draw_text_multi(
 
 fn text_wrap(text: String, wrap: TextWrap, width: Int) -> List(String) {
   case wrap {
-    Wrap -> text_wrap_loop(string.to_graphemes(text), width, 0, [], [], [])
+    Wrap -> text_wrap_loop(string.to_graphemes(text), width, 0, 0, [], [], [])
     NoWrap -> text |> string.split("\n")
   }
 }
@@ -1398,7 +1398,8 @@ fn text_wrap(text: String, wrap: TextWrap, width: Int) -> List(String) {
 fn text_wrap_loop(
   text: List(String),
   width: Int,
-  count: Int,
+  line_length: Int,
+  word_length: Int,
   word: List(String),
   line: List(String),
   acc: List(String),
@@ -1408,30 +1409,57 @@ fn text_wrap_loop(
     [line, ..acc]
   }
   case text {
+    // respect \n's
     ["\n", ..xs] ->
-      text_wrap_loop(xs, width, 0, [], [], append(word, line, acc))
+      text_wrap_loop(xs, width, 0, 0, [], [], append(word, line, acc))
+    // append word to line
     [" ", ..xs] ->
       text_wrap_loop(
         xs,
         width,
-        count + 1,
+        line_length + 1,
+        0,
         [],
         list.append([" ", ..word], line),
         acc,
       )
     [x, ..xs] ->
-      case count >= width {
-        True ->
+      case line_length >= width, word_length >= width {
+        // word length exceeds entire width of viewport, split word
+        _, True ->
+          text_wrap_loop(
+            xs,
+            width,
+            0,
+            0,
+            [],
+            [],
+            append([x, ..word], line, acc),
+          )
+        // line length exceeds width, split line
+        True, _ ->
           text_wrap_loop(
             list.append(list.reverse([x, ..word]), xs),
             width,
+            0,
             0,
             [],
             [],
             append([], line, acc),
           )
-        False -> text_wrap_loop(xs, width, count + 1, [x, ..word], line, acc)
+        // build line
+        _, _ ->
+          text_wrap_loop(
+            xs,
+            width,
+            line_length + 1,
+            word_length + 1,
+            [x, ..word],
+            line,
+            acc,
+          )
       }
+    // return wrapped text
     [] -> append(word, line, acc) |> list.reverse
   }
 }
