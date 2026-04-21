@@ -134,36 +134,22 @@ fn shore_start(
       )
     renderer(init_terminal())
     effect_handler(effect_init, effect_queue)
-    on_input(read_input_js(effect_queue, _))
+    on_input(send_input(_, effect_queue))
+    resize_sigwinch(effect_queue)
     let state = model |> spec.view |> render(state, _, key.Null)
     state
   }
   let shore = start_js(state, shore_loop)
-  sigwinch(fn() {
-    let assert Ok(height) = terminal_rows()
-    let assert Ok(width) = terminal_columns()
-    send_js(shore, Resize(width, height))
-    Nil
-  })
   let callback = fn(event) { send_js(shore, event) }
   Ok(callback)
 }
 
 @external(javascript, "./internal.ffi.mjs", "exit")
-fn exitt() -> Nil {
+fn exit_js() -> Nil {
   Nil
 }
 
-@target(javascript)
-fn read_input_js(effect_queue: fn(Event(msg)) -> Nil, key: String) -> Nil {
-  key |> key.from_string |> KeyPress |> effect_queue
-  Nil
-}
-
-@external(javascript, "./internal.ffi.mjs", "on_input")
-pub fn on_input(fun: fn(String) -> Nil) -> Nil {
-  "erlang" |> fun |> echo
-}
+type Shore
 
 @external(javascript, "./internal.ffi.mjs", "start")
 fn start_js(
@@ -171,36 +157,8 @@ fn start_js(
   loop: fn(State(model, msg), Event(msg)) -> State(model, msg),
 ) -> Shore
 
-@external(javascript, "./internal.ffi.mjs", "sigwinch")
-fn sigwinch(fun: fn() -> Nil) -> Nil
-
-@external(javascript, "./internal.ffi.mjs", "spawn")
-fn spawn_unlinked(fun: fn() -> msg) -> Nil {
-  let _ = process.spawn_unlinked(fun)
-  Nil
-}
-
-@external(javascript, "./internal.ffi.mjs", "spawn")
-fn spawn(fun: fn() -> msg) -> Nil {
-  let _ = process.spawn(fun)
-  Nil
-}
-
-type Shore
-
 @external(javascript, "./internal.ffi.mjs", "send")
 fn send_js(shore: Shore, event: Event(msg)) -> Nil
-
-@target(erlang)
-fn sleep(duration: Int) -> Nil {
-  process.sleep(duration)
-}
-
-@target(javascript)
-fn sleep(_duration: Int) -> Nil {
-  //todo as "sleep not implemented "
-  Nil
-}
 
 @target(erlang)
 fn shore_start(
@@ -216,7 +174,7 @@ fn shore_start(
     let assert Ok(width) = terminal_columns()
     let assert Ok(height) = terminal_rows()
     use renderer <- result.try(
-      configure_renderer(renderer, effect_subject, #(width, height)),
+      configure_renderer(renderer, effect_queue, #(width, height)),
     )
     let state =
       State(
@@ -264,7 +222,7 @@ fn shore_start(
 @target(erlang)
 fn configure_renderer(
   renderer: Option(fn(String) -> Nil),
-  shore: Subject(Event(msg)),
+  effect_queue: fn(Event(msg)) -> Nil,
   size: #(Int, Int),
 ) -> Result(fn(String) -> Nil, String) {
   case renderer {
@@ -273,11 +231,11 @@ fn configure_renderer(
       case default_renderer() {
         Ok(actor.Started(data: renderer, ..)) -> {
           raw()
+          spawn(fn() { on_input(send_input(_, effect_queue)) })
           case is_windows() {
-            True -> spawn(fn() { resize_poll(shore, size) })
-            False -> spawn(fn() { resize_sigwinch(shore) })
+            True -> spawn(fn() { resize_poll(effect_queue, size) })
+            False -> spawn(fn() { resize_sigwinch(effect_queue) })
           }
-          spawn(fn() { read_input(shore) })
           Ok(fn(str) { process.send(renderer, str) })
         }
         // note: cant return start error when inside an actor initialiser
@@ -286,14 +244,12 @@ fn configure_renderer(
   }
 }
 
-@target(erlang)
 fn default_renderer() -> Result(Started(Subject(String)), actor.StartError) {
   actor.new(Nil)
   |> actor.on_message(default_renderer_loop)
   |> actor.start
 }
 
-@target(erlang)
 fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
   msg |> io.print
   actor.continue(state)
@@ -303,31 +259,31 @@ fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
 // RESIZE
 //
 
+// TODO: handle queueing on js?
 @target(erlang)
-fn resize_poll(shore: Subject(Event(msg)), size: #(Int, Int)) -> Nil {
+fn resize_poll(effect_queue: fn(Event(msg)) -> Nil, size: #(Int, Int)) -> Nil {
   let assert Ok(width) = terminal_columns()
   let assert Ok(height) = terminal_rows()
   let new_size = #(width, height)
   let size = case size == new_size {
     True -> size
     False -> {
-      actor.send(shore, Resize(new_size.0, new_size.1))
-      actor.send(shore, Redraw)
+      effect_queue(Resize(new_size.0, new_size.1))
+      effect_queue(Redraw)
       new_size
     }
   }
-  sleep(16)
-  resize_poll(shore, size)
+  sleep(fn() { Nil }, 16)
+  resize_poll(effect_queue, size)
 }
 
-@target(erlang)
-fn resize_sigwinch(shore: Subject(Event(msg))) -> Nil {
+fn resize_sigwinch(effect_queue: fn(Event(msg)) -> Nil) -> Nil {
   fn() {
     let assert Ok(width) = terminal_columns()
     let assert Ok(height) = terminal_rows()
     let resize = Resize(width, height)
-    actor.send(shore, resize)
-    actor.send(shore, Redraw)
+    effect_queue(resize)
+    effect_queue(Redraw)
   }
   |> signal.start
 }
@@ -337,16 +293,16 @@ fn resize_sigwinch(shore: Subject(Event(msg))) -> Nil {
 //
 
 @external(erlang, "io", "get_chars")
-fn get_chars(prompt: String, count: Int) -> String {
-  todo as "implement javascript input handler"
+fn get_chars(prompt: String, count: Int) -> String
+
+@external(javascript, "./internal.ffi.mjs", "on_input")
+fn on_input(fun: fn(String) -> Nil) -> Nil {
+  get_chars("", 1024) |> fun
+  on_input(fun)
 }
 
-// TODO: js
-@target(erlang)
-fn read_input(shore: Subject(Event(msg))) -> Nil {
-  let key = get_chars("", 1024) |> key.from_string
-  key |> KeyPress |> process.send(shore, _)
-  read_input(shore)
+fn send_input(key: String, effect_queue: fn(Event(msg)) -> Nil) -> Nil {
+  key |> key.from_string |> KeyPress |> effect_queue
 }
 
 //
@@ -384,11 +340,7 @@ pub fn resize(width width: Int, height height: Int) -> Event(msg) {
   Resize(width:, height:)
 }
 
-fn shore_loop(
-  state: State(model, msg),
-  event: Event(msg),
-  //) -> actor.Next(State(model, msg), Event(msg)) {
-) -> State(model, msg) {
+fn shore_loop(state: State(model, msg), event: Event(msg)) -> State(model, msg) {
   // NOTE: assign here to avoid syntax highlighting error, delete whenever fixed
   let exit = state.spec.keybinds.exit
 
@@ -398,11 +350,9 @@ fn shore_loop(
       effect_handler(effect, state.effect_queue)
       let state = State(..state, model: model)
       let state = redraw_on_update(state, key.Null)
-      //actor.continue(state)
+      state
     }
-    KeyPress(input) if input == exit -> {
-      shore_loop(state, Exit)
-    }
+    KeyPress(input) if input == exit -> shore_loop(state, Exit)
     KeyPress(input) -> {
       let ui = state.spec.view(state.model)
       let state = case state.focused {
@@ -497,25 +447,19 @@ fn shore_loop(
         None -> state
       }
       let state = redraw_on_update(state, input)
-      //actor.continue(state)
+      state
     }
-    Redraw -> {
-      let state = redraw(state, key.Null)
-      //actor.continue(state)
-    }
-    Resize(width:, height:) -> {
-      let state = State(..state, width:, height:)
-      //actor.continue(state)
-    }
+    Redraw -> redraw(state, key.Null)
+    Resize(width:, height:) -> State(..state, width:, height:)
     Exit -> {
-      // TODO: js exit
       state.renderer(restore_terminal())
       // sleep to give a grace for restore terminal to complete
       // probably better to refactor this into process.call
-      exitt()
-      sleep(16)
-      state.spec.exit(Nil)
-      //actor.stop()
+      fn() {
+        state.spec.exit(Nil)
+        exit_js()
+      }
+      |> sleep(16)
       state
     }
   }
@@ -599,7 +543,7 @@ fn redraw_on_timer(spec: Spec(model, msg), shore: fn(Event(msg)) -> Nil) -> Nil 
 
 fn do_redraw_on_timer(shore: fn(Event(msg)) -> Nil, x: Int) -> Nil {
   shore(Redraw)
-  sleep(x)
+  sleep(fn() { Nil }, x)
   do_redraw_on_timer(shore, x)
 }
 
@@ -2255,4 +2199,27 @@ fn is_windows() -> Bool {
     Win32(..) -> True
     _ -> False
   }
+}
+
+//
+// WORK
+//
+
+// TODO: javascript spawn not necessary?
+@external(javascript, "./internal.ffi.mjs", "spawn")
+fn spawn_unlinked(fun: fn() -> msg) -> Nil {
+  let _ = process.spawn_unlinked(fun)
+  Nil
+}
+
+@external(javascript, "./internal.ffi.mjs", "spawn")
+fn spawn(fun: fn() -> msg) -> Nil {
+  let _ = process.spawn(fun)
+  Nil
+}
+
+@external(javascript, "./internal.ffi.mjs", "sleep")
+fn sleep(fun: fn() -> Nil, duration: Int) -> Nil {
+  process.sleep(duration)
+  fun()
 }

@@ -16,6 +16,7 @@ export function raw() {
 
 export function cooked() {
   process.stdin.setRawMode(false);
+  return undefined;
 }
 
 export function on_input(fun) {
@@ -23,6 +24,7 @@ export function on_input(fun) {
   process.stdin.on("data", (key) => {
     fun(key);
   });
+  return undefined;
 }
 
 
@@ -53,10 +55,11 @@ export function start(init, loop) {
 
 export function send(shore, event) {
   shore.send(event);
+  return undefined;
 }
 
 export function exit() {
-  process.exit(0);
+  return process.exit(0);
 }
 
 export function timeout(callback, duration) {
@@ -69,15 +72,19 @@ export function f(url) {
 
 export function spawn(fun) {
   queueMicrotask(async () => { await fun() })
+  return undefined;
 }
 
 export function is_windows() {
   return process.platform === "win32";
 }
 
-export function sigwinch(fun) {
-  process.stdout.on("resize", () => {
-    fun()
-  });
+export function sigwinch_start(fun) {
+  process.stdout.on("resize", () => { fun() });
+  return undefined;
 }
 
+export function sleep(fun, duration) {
+  setTimeout(fun, duration);
+  return undefined;
+}
