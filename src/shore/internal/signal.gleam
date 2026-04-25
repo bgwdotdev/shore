@@ -7,7 +7,6 @@ const module = "shore@internal@signal"
 pub fn start(fun: fn() -> Nil) -> Nil {
   set_signal(Sigwinch, Handle)
   add_handler(atom.create("erl_signal_server"), atom.create(module), fun)
-  process.sleep_forever()
 }
 
 /// handler for erl_signal_server must handle all events listed

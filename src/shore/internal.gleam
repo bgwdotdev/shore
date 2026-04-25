@@ -135,7 +135,12 @@ fn shore_start(
     renderer(init_terminal())
     effect_handler(effect_init, effect_queue)
     on_input(send_input(_, effect_queue))
-    resize_sigwinch(effect_queue)
+    case is_windows() {
+      True ->
+        fn(state) { resize_poll(effect_queue, state) }
+        |> on_interval(#(0, 0), 16)
+      False -> resize_sigwinch(effect_queue)
+    }
     let state = model |> spec.view |> render(state, _, key.Null)
     state
   }
@@ -233,8 +238,10 @@ fn configure_renderer(
           raw()
           spawn(fn() { on_input(send_input(_, effect_queue)) })
           case is_windows() {
-            True -> spawn(fn() { resize_poll(effect_queue, size) })
-            False -> spawn(fn() { resize_sigwinch(effect_queue) })
+            True ->
+              fn(state) { resize_poll(effect_queue, state) }
+              |> on_interval(size, 16)
+            False -> resize_sigwinch(effect_queue)
           }
           Ok(fn(str) { process.send(renderer, str) })
         }
@@ -259,9 +266,10 @@ fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
 // RESIZE
 //
 
-// TODO: handle queueing on js?
-@target(erlang)
-fn resize_poll(effect_queue: fn(Event(msg)) -> Nil, size: #(Int, Int)) -> Nil {
+fn resize_poll(
+  effect_queue: fn(Event(msg)) -> Nil,
+  size: #(Int, Int),
+) -> #(Int, Int) {
   let assert Ok(width) = terminal_columns()
   let assert Ok(height) = terminal_rows()
   let new_size = #(width, height)
@@ -273,8 +281,7 @@ fn resize_poll(effect_queue: fn(Event(msg)) -> Nil, size: #(Int, Int)) -> Nil {
       new_size
     }
   }
-  sleep(fn() { Nil }, 16)
-  resize_poll(effect_queue, size)
+  size
 }
 
 fn resize_sigwinch(effect_queue: fn(Event(msg)) -> Nil) -> Nil {
@@ -455,6 +462,7 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) -> State(model, msg) 
       state.renderer(restore_terminal())
       // sleep to give a grace for restore terminal to complete
       // probably better to refactor this into process.call
+      exit_js()
       fn() {
         state.spec.exit(Nil)
         exit_js()
@@ -530,21 +538,27 @@ pub type Redraw {
   OnTimer(ms: Int)
 }
 
-fn redraw_on_timer(spec: Spec(model, msg), shore: fn(Event(msg)) -> Nil) -> Nil {
+fn redraw_on_timer(
+  spec: Spec(model, msg),
+  effect_queue: fn(Event(msg)) -> Nil,
+) -> Nil {
   case spec.redraw {
     OnUpdate -> Nil
-    OnTimer(x) -> {
-      // TODO: js
-      spawn(fn() { do_redraw_on_timer(shore, x) })
+    OnTimer(timer) -> {
+      fn(_) {
+        effect_queue(Redraw)
+        Nil
+      }
+      |> on_interval(Nil, timer)
       Nil
     }
   }
 }
 
-fn do_redraw_on_timer(shore: fn(Event(msg)) -> Nil, x: Int) -> Nil {
-  shore(Redraw)
-  sleep(fn() { Nil }, x)
-  do_redraw_on_timer(shore, x)
+fn do_redraw_on_timer(effect_queue: fn(Event(msg)) -> Nil, timer: Int) -> Nil {
+  effect_queue(Redraw)
+  sleep(fn() { Nil }, timer)
+  do_redraw_on_timer(effect_queue, timer)
 }
 
 fn redraw(state: State(model, msg), input: Key) -> State(model, msg) {
@@ -2222,4 +2236,17 @@ fn spawn(fun: fn() -> msg) -> Nil {
 fn sleep(fun: fn() -> Nil, duration: Int) -> Nil {
   process.sleep(duration)
   fun()
+}
+
+@external(javascript, "./internal.ffi.mjs", "on_interval")
+fn on_interval(fun: fn(state) -> state, state: state, interval: Int) -> Nil {
+  process.spawn(fn() { do_on_interval(fun, state, interval) })
+  Nil
+}
+
+@external(javascript, "./internal.ffi.mjs", "on_interval")
+fn do_on_interval(fun: fn(state) -> state, state: state, interval: Int) -> Nil {
+  let state = fun(state)
+  process.sleep(interval)
+  do_on_interval(fun, state, interval)
 }

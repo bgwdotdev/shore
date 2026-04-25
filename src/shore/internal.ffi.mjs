@@ -85,6 +85,14 @@ export function sigwinch_start(fun) {
 }
 
 export function sleep(fun, duration) {
-  setTimeout(fun, duration);
+  //setTimeout(fun, duration);
+  //setInterval(fun, duration);
+  //setInterval(() => {}, 16);
+  return undefined;
+}
+
+export function on_interval(fun, init, duration) {
+  let state = init;
+  setInterval(() => { state = fun(state) }, duration);
   return undefined;
 }
