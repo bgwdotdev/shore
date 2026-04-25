@@ -90,16 +90,13 @@ pub fn start(
   start_custom_renderer(spec, None)
 }
 
-// note: custom renderers should handle the following:
-// drawing to screen
-// resize events
-// reading user input
-
 pub fn start_custom_renderer(
   spec: Spec(model, msg),
-  renderer: Option(fn(String) -> Nil),
+  terminal_handler: Option(TerminalHandler(msg)),
 ) -> Result(fn(Event(msg)) -> Nil, StartError) {
-  use shore <- result.map(shore_start(spec, renderer))
+  let terminal_handler =
+    option.unwrap(terminal_handler, default_terminal_handler())
+  use shore <- result.map(shore_start(spec, terminal_handler))
   redraw_on_timer(spec, shore)
   shore
 }
@@ -111,16 +108,14 @@ pub type StartError {
 @target(javascript)
 fn shore_start(
   spec: Spec(model, msg),
-  _renderer: Option(fn(String) -> Nil),
+  terminal_handler: TerminalHandler(msg),
 ) -> Result(fn(Event(msg)) -> Nil, StartError) {
-  let assert Ok(height) = terminal_rows()
-  let assert Ok(width) = terminal_columns()
-  let _ = raw()
-  let renderer = fn(str) { str |> io.print }
   let state = fn(effect_queue: fn(Event(msg)) -> Nil) {
-    let effect_subject = fn(msg) { effect_queue(msg) }
+    let #(width, height) = terminal_handler.init()
+    terminal_handler.input(effect_queue)
+    terminal_handler.resize(effect_queue)
     let #(model, effect_init) =
-      spec.init(fn(msg) { msg |> Cmd |> effect_subject })
+      spec.init(fn(msg) { msg |> Cmd |> effect_queue })
     let state =
       State(
         spec:,
@@ -129,18 +124,10 @@ fn shore_start(
         height:,
         effect_queue:,
         focused: None,
-        renderer:,
+        renderer: terminal_handler.draw,
         last_frame: "",
       )
-    renderer(init_terminal())
     effect_handler(effect_init, effect_queue)
-    on_input(send_input(_, effect_queue))
-    case is_windows() {
-      True ->
-        fn(state) { resize_poll(effect_queue, state) }
-        |> on_interval(#(0, 0), 16)
-      False -> resize_sigwinch(effect_queue)
-    }
     let state = model |> spec.view |> render(state, _, key.Null)
     state
   }
@@ -168,7 +155,7 @@ fn send_js(shore: Shore, event: Event(msg)) -> Nil
 @target(erlang)
 fn shore_start(
   spec: Spec(model, msg),
-  renderer: Option(fn(String) -> Nil),
+  terminal_handler: TerminalHandler(msg),
 ) -> Result(fn(Event(msg)) -> Nil, StartError) {
   actor.new_with_initialiser(1000, fn(effect_subject) {
     let effect_queue: fn(Event(msg)) -> Nil = fn(effect) {
@@ -176,11 +163,9 @@ fn shore_start(
     }
     let subj = process.new_subject()
     let #(model, effect_init) = spec.init(fn(msg) { process.send(subj, msg) })
-    let assert Ok(width) = terminal_columns()
-    let assert Ok(height) = terminal_rows()
-    use renderer <- result.try(
-      configure_renderer(renderer, effect_queue, #(width, height)),
-    )
+    let #(width, height) = terminal_handler.init()
+    terminal_handler.input(effect_queue)
+    terminal_handler.resize(effect_queue)
     let state =
       State(
         spec:,
@@ -189,10 +174,9 @@ fn shore_start(
         height:,
         effect_queue:,
         focused: None,
-        renderer:,
+        renderer: terminal_handler.draw,
         last_frame: "",
       )
-    renderer(init_terminal())
     let state = model |> spec.view |> render(state, _, key.Null)
     effect_handler(effect_init, effect_queue)
 
@@ -221,41 +205,68 @@ fn shore_start(
 }
 
 //
-// RENDERER
+// TERMINAL HANDLER
 //
 
-@target(erlang)
-fn configure_renderer(
-  renderer: Option(fn(String) -> Nil),
-  effect_queue: fn(Event(msg)) -> Nil,
-  size: #(Int, Int),
-) -> Result(fn(String) -> Nil, String) {
-  case renderer {
-    Some(renderer) -> Ok(renderer)
-    None ->
-      case default_renderer() {
-        Ok(actor.Started(data: renderer, ..)) -> {
-          raw()
-          spawn(fn() { on_input(send_input(_, effect_queue)) })
-          case is_windows() {
-            True ->
-              fn(state) { resize_poll(effect_queue, state) }
-              |> on_interval(size, 16)
-            False -> resize_sigwinch(effect_queue)
-          }
-          Ok(fn(str) { process.send(renderer, str) })
-        }
-        // note: cant return start error when inside an actor initialiser
-        Error(error) -> Error(string.inspect(error))
-      }
+pub opaque type TerminalHandler(msg) {
+  TerminalHandler(
+    /// handle drawing the view to the terminal
+    draw: fn(String) -> Nil,
+    /// setup the terminal and return the initial width/height of terminal
+    init: fn() -> #(Int, Int),
+    /// handle key input and send event to runtime
+    input: fn(fn(Event(msg)) -> Nil) -> Nil,
+    /// handle terminal resize and send event to runtime
+    resize: fn(fn(Event(msg)) -> Nil) -> Nil,
+  )
+}
+
+@target(javascript)
+fn default_terminal_handler() -> TerminalHandler(msg) {
+  let draw = fn(view) { io.print(view) }
+  let init = fn() {
+    let assert Ok(width) = terminal_columns()
+    let assert Ok(height) = terminal_rows()
+    raw()
+    draw(init_terminal())
+    #(width, height)
   }
+  let input = fn(effect_queue) { on_input(send_input(_, effect_queue)) }
+  let resize = fn(effect_queue) {
+    case is_windows() {
+      True ->
+        fn(state) { resize_poll(effect_queue, state) }
+        |> on_interval(#(0, 0), 16)
+      False -> resize_sigwinch(effect_queue)
+    }
+  }
+  TerminalHandler(draw:, init:, resize:, input:)
 }
 
 @target(erlang)
-fn default_renderer() -> Result(Started(Subject(String)), actor.StartError) {
-  actor.new(Nil)
-  |> actor.on_message(default_renderer_loop)
-  |> actor.start
+fn default_terminal_handler() -> TerminalHandler(msg) {
+  let assert Ok(renderer) =
+    actor.new(Nil) |> actor.on_message(default_renderer_loop) |> actor.start
+  let draw = fn(view) { process.send(renderer.data, view) }
+  let init = fn() {
+    let assert Ok(width) = terminal_columns()
+    let assert Ok(height) = terminal_rows()
+    raw()
+    draw(init_terminal())
+    #(width, height)
+  }
+  let input = fn(effect_queue) {
+    spawn(fn() { on_input(send_input(_, effect_queue)) })
+  }
+  let resize = fn(effect_queue) {
+    case is_windows() {
+      True ->
+        fn(state) { resize_poll(effect_queue, state) }
+        |> on_interval(#(0, 0), 16)
+      False -> resize_sigwinch(effect_queue)
+    }
+  }
+  TerminalHandler(draw:, init:, input:, resize:)
 }
 
 fn default_renderer_loop(state: Nil, msg: String) -> actor.Next(Nil, String) {
