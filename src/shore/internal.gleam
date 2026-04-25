@@ -251,6 +251,7 @@ fn configure_renderer(
   }
 }
 
+@target(erlang)
 fn default_renderer() -> Result(Started(Subject(String)), actor.StartError) {
   actor.new(Nil)
   |> actor.on_message(default_renderer_loop)
@@ -299,7 +300,9 @@ fn resize_sigwinch(effect_queue: fn(Event(msg)) -> Nil) -> Nil {
 // READ INPUT
 //
 
+/// note: this is blocking on javascript, prefer on_input
 @external(erlang, "io", "get_chars")
+@external(javascript, "./internal.ffi.mjs", "get_chars")
 fn get_chars(prompt: String, count: Int) -> String
 
 @external(javascript, "./internal.ffi.mjs", "on_input")
@@ -553,12 +556,6 @@ fn redraw_on_timer(
       Nil
     }
   }
-}
-
-fn do_redraw_on_timer(effect_queue: fn(Event(msg)) -> Nil, timer: Int) -> Nil {
-  effect_queue(Redraw)
-  sleep(fn() { Nil }, timer)
-  do_redraw_on_timer(effect_queue, timer)
 }
 
 fn redraw(state: State(model, msg), input: Key) -> State(model, msg) {

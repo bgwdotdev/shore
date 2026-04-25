@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { Result$Ok, Result$Error } from '../gleam.mjs';
+import fs from 'node:fs';
 
 export function terminal_rows() {
   return Result$Ok(process.stdout.rows);
@@ -95,4 +96,11 @@ export function on_interval(fun, init, duration) {
   let state = init;
   setInterval(() => { state = fun(state) }, duration);
   return undefined;
+}
+
+export function get_chars(prompt, count) {
+  const buffer = Buffer.alloc(count);
+  const bytes = fs.readSync(process.stdin.fd, buffer, 0, count);
+  const response = buffer.toString('utf8', 0, bytes);
+  return response;
 }
