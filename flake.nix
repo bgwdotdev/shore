@@ -14,6 +14,7 @@
             packages = with pkgs; [
               gleam
               erlang_28
+              bun
             ];
           };
         }
