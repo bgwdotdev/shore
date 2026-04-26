@@ -131,7 +131,16 @@ fn shore_start(
     let state = model |> spec.view |> render(state, _, key.Null)
     state
   }
-  let shore = start_js(state, shore_loop)
+  let loop = fn(state, event) {
+    case shore_loop(state, event) {
+      Ok(state) -> state
+      Error(Nil) -> {
+        exit_js()
+        state
+      }
+    }
+  }
+  let shore = start_js(state, loop)
   let callback = fn(event) { send_js(shore, event) }
   Ok(callback)
 }
@@ -192,7 +201,13 @@ fn shore_start(
     |> Ok
   })
   |> actor.on_message(fn(state, event) {
-    actor.continue(shore_loop(state, event))
+    case shore_loop(state, event) {
+      Ok(state) -> actor.continue(state)
+      Error(Nil) -> {
+        process.sleep(16)
+        actor.stop()
+      }
+    }
   })
   |> actor.start
   |> result.replace_error(StartError)
@@ -361,7 +376,10 @@ pub fn resize(width width: Int, height height: Int) -> Event(msg) {
   Resize(width:, height:)
 }
 
-fn shore_loop(state: State(model, msg), event: Event(msg)) -> State(model, msg) {
+fn shore_loop(
+  state: State(model, msg),
+  event: Event(msg),
+) -> Result(State(model, msg), Nil) {
   // NOTE: assign here to avoid syntax highlighting error, delete whenever fixed
   let exit = state.spec.keybinds.exit
 
@@ -371,7 +389,7 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) -> State(model, msg) 
       effect_handler(effect, state.effect_queue)
       let state = State(..state, model: model)
       let state = redraw_on_update(state, key.Null)
-      state
+      state |> Ok
     }
     KeyPress(input) if input == exit -> shore_loop(state, Exit)
     KeyPress(input) -> {
@@ -468,21 +486,14 @@ fn shore_loop(state: State(model, msg), event: Event(msg)) -> State(model, msg) 
         None -> state
       }
       let state = redraw_on_update(state, input)
-      state
+      state |> Ok
     }
-    Redraw -> redraw(state, key.Null)
-    Resize(width:, height:) -> State(..state, width:, height:)
+    Redraw -> redraw(state, key.Null) |> Ok
+    Resize(width:, height:) -> State(..state, width:, height:) |> Ok
     Exit -> {
       state.renderer(restore_terminal())
-      // sleep to give a grace for restore terminal to complete
-      // probably better to refactor this into process.call
-      exit_js()
-      fn() {
-        state.spec.exit(Nil)
-        exit_js()
-      }
-      |> sleep(16)
-      state
+      state.spec.exit(Nil)
+      Error(Nil)
     }
   }
 }
