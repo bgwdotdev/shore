@@ -1071,20 +1071,22 @@ fn render_node(
     Col(children) -> {
       list.map(children, render_node(focused, _, last_input, pos))
       |> option.values
-      |> element_join(sep(SepCol))
+      |> element_join(sep(SepCol) <> c(Column(pos.x)))
       |> element_prefix(c(SavePos))
       |> Some
     }
     Box(children:, title:, fg:) -> {
       // TODO: review how box grid gaps implement
-      let pos = Pos(..pos, width: pos.width - 3, height: pos.height - 2)
+      let pos =
+        Pos(..pos, width: pos.width - 3, height: pos.height - 2, x: pos.x + 2)
       let pos_child = Pos(..pos, width: pos.width - 2)
       [
         draw_box(int.max(pos.width, 1), int.max(pos.height, 1), title, fg),
         ..list.map(children, render_node(focused, _, last_input, pos_child))
         |> option.values
       ]
-      |> element_join(sep(SepCol))
+      |> element_join(sep(SepCol) <> c(Column(pos.x)))
+      |> element_prefix(c(SavePos))
       |> Some
     }
     Table(width:, table:) -> {

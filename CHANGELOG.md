@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   size changes between polls)
 - ui: image\_unstable now takes width and height `style.Size` values
 
+### Fixed
+
+- ui: nodes after a row inside a col or box will now properly align
+
 ### Depcrecated
 
 - ui: `text`, `text_styled`, `text_wrapped`, `text_wrapped_styled`
